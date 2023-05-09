@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  db_filestore:
+    image: postgres:15-alpine
+    hostname: db_filestore
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "fM3fFYwNbeIfxsPH"
+      POSTGRES_DATABASE: "postgres"
+      DB_USERNAME: "filestore"
+      DB_PASSWORD: "nAjk85YwUOplsXaA"
+      DB_DATABASE: "filestore"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - ./postgresql/init-filestore-db.sh:/docker-entrypoint-initdb.d/init-filestore-db.sh
+    ports:
+      - 5432:5432
+
+  vfeeg-filestore:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./vfeeg-filestore-data:/vfeeg-filestore-data
+    environment:
+      FLASK_DEBUG: "false"
+      APP_LOG_LEVEL: "debug"
+      DB_HOSTNAME: "db_filestore"
+      DB_USERNAME: "filestore"
+      DB_PASSWORD: "nAjk85YwUOplsXaA"
+      DB_DATABASE: "filestore"
+      DB_PORT: 5432
+      HTTP_PROTOCOL: "http"
+      HTTP_HOSTNAME: "192.168.108.13"
+      HTTP_PORT: 5000
+      HTTP_FILE_DL_ENDPOINT: "filestore"
+      FILESTORE_LOCAL_BASE_DIR: "/vfeeg-filestore-data"
+      FILESTORE_CREATE_UNKNOWN_CATEGORY: true
+      FILESTORE_CREATE_UNKNOWN_CONTAINER: true
+      FILESTORE_CREATE_UNKNOWN_STORAGE: true
+    depends_on:
+      - db_filestore
+
+volumes:
+    postgres_data:
