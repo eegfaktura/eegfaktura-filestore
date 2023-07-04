@@ -18,13 +18,20 @@
 FROM python:3.10-slim-bullseye
 LABEL org.vfeeg.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
 LABEL org.vfeeg.image.authors="matthias@poetti.net"
+LABEL org.opencontainers.image.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
+LABEL org.opencontainers.image.authors="matthias@poetti.net"
+LABEL org.opencontainers.image.title="EEGfaktura Filestore"
+LABEL org.opencontainers.image.description="Filestore service container handing the file upload and download for the project eegFaktura"
+LABEL org.opencontainers.image.licenses=AGPL-3.0
+LABEL org.opencontainers.image.source=https://github.com/vfeeg-development/eegfaktura-filestore
+LABEL org.opencontainers.image.base.name=docker.io/python:3.10-slim-bullseye
 LABEL description="EEGfaktura filestore"
 LABEL version="0.0.1"
 
 WORKDIR /vfeeg-filestore
 
 COPY requirements.txt requirements.txt
-RUN apt-get update && apt-get -y upgrade && apt-get -y install libpq-dev gcc
+RUN apt-get update && apt-get -y upgrade && apt-get -y install libpq-dev gcc postgresql-client
 RUN pip3 install --no-cache-dir --upgrade pip && pip3 install --no-cache-dir --upgrade -r requirements.txt
 COPY . .
 
