@@ -1,6 +1,10 @@
+# ignore Docker files
+Dockerfile
+docker-compose.yml
+# ignore db files
+postgresql
 #ignoer grpc files and folder
 app/grpc
 grpc_codegen.sh
 # ignore vfeg-filestore-data
 eegfaktura-filestore-data
-
