@@ -29,10 +29,11 @@ from . import Base
 
 class Storage(Base):
     __tablename__ = "storages"
+    __table_args__ = {'schema': 'filestore'}
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
 
-    community_id: Mapped[str] = mapped_column(nullable=False)
+    tenant: Mapped[str] = mapped_column(nullable=False)
 
     name: Mapped[str] = mapped_column(nullable=True)
     configuration: Mapped[dict[str, Any]] = mapped_column(nullable=True)
@@ -42,7 +43,7 @@ class Storage(Base):
     def as_dict(self):
         return {
             "id": self.id,
-            "community_id": self.community_id,
+            "tenant": self.tenant,
             "name": self.name,
             "configuration": self.configuration
         }

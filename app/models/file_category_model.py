@@ -34,6 +34,8 @@ from . import Base
 
 class FileCategory(Base):
     __tablename__ = "file_categories"
+    __table_args__ = {'schema': 'filestore'}
+
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     name: Mapped[str] = mapped_column(nullable=True)
 

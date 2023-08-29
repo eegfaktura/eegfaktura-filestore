@@ -27,6 +27,10 @@ class Attribute:
     key: str
     value: typing.Optional[str] = ""
 
+@strawberry.input
+class AttributeInput:
+    key: str
+    value: typing.Optional[str] = ""
 
 @strawberry.type
 class AddAttribute:

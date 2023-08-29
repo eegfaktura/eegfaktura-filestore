@@ -2,5 +2,5 @@
 app/grpc
 grpc_codegen.sh
 # ignore vfeg-filestore-data
-vfeeg-filestore-data
+eegfaktura-filestore-data
 

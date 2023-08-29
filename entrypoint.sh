@@ -17,30 +17,33 @@
 #+
 
 PYTHON=`which python3`
-PSQL=`which psql`
 
-check_pg_status() {
-  PGPASSWORD=$DB_PASSWORD $PSQL --host=$DB_HOSTNAME --username=$DB_USERNAME $DB_DATABASE -c "\conninfo" &>/dev/null
-  return $?
-}
 
-# Wait for PSQL Server to be ready
-i=0
-
-until check_pg_status
-do
-  echo "Waiting for PostgreSQL Database to be ready ..."
-  sleep 5
-
-  if [ $i -eq 59 ]; then
-    echo "PostgreSQL did not start within 5 minutes"
-    echo "Stopping ..."
-    exit 1
-  fi
-
-  i=$((i+1))
-done
-
+# TODEL if not required
+#  OLD PSQL Check to verify if DB is read for connection -> moved to DOCKER healthcheck and conditional require
+#PSQL=`which psql`
+#
+#check_pg_status() {
+#  PGPASSWORD=$DB_PASSWORD $PSQL --host=$DB_HOSTNAME --username=$DB_USERNAME $DB_DATABASE -c "\conninfo" &>/dev/null
+#  return $?
+#}
+#
+## Wait for PSQL Server to be ready
+#i=0
+#
+#until check_pg_status
+#do
+#  echo "Waiting for PostgreSQL Database to be ready ..."
+#  sleep 5
+#
+#  if [ $i -eq 59 ]; then
+#    echo "PostgreSQL did not start within 5 minutes"
+#    echo "Stopping ..."
+#    exit 1
+#  fi
+#
+#  i=$((i+1))
+#done
 
 # Space for extra tasks
 # Initialize DB

@@ -17,6 +17,8 @@
 
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -32,6 +34,13 @@ async_session = sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
+
+# @event.listens_for(engine.sync_engine, "connect")
+# def connect(dbapi_connection, connection_record):
+#     cursor_obj = dbapi_connection.cursor()
+#     cursor_obj.execute(f"SET SEARCH_PATH TO filestore, public;")
+#     cursor_obj.close()
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

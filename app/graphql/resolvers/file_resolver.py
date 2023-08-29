@@ -15,70 +15,114 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+import logging
 import os.path
+import typing
 import uuid
+import json
 
 from datetime import datetime
 
 from app.file_metadata import allowed_media_types
 from fastapi import UploadFile
 from sqlalchemy import select
-from sqlalchemy.orm import subqueryload, load_only, selectinload
+from sqlalchemy.orm import subqueryload, load_only, selectinload, contains_eager, join
 
 from app.config import settings
 
 from app.db.session import get_session
 from app.dependencies import get_valid_data, get_file_download_uri, upload_file, delete_file, move_file
+from app.graphql.scalars.attribute_scalar import AddAttribute, AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, FileCategoryWrong, NoFileContainerFound, AddFile, AddFileError
 
 
-async def get_files(community_id: str, info, limit:int):
+async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], category: str, user_id: uuid.UUID, limit: int, offset: int = 0) :
     """
     Get all files for community
-    :param community_id: Community id to search for files
+    :param tenant: Community id to search for files
     :param info:
     :param limit: limit the amount of returned elements
+    :param attributes: attributes list the file entry must have
     :return: Commmunity file list
     """
     async with get_session() as s:
 
-        filequery = select(file_model.File) \
-            .options(load_only(file_model.File.community_id,
+        filequery = (
+            select(file_model.File)
+            .join(file_model.File.file_container)
+            .join(file_container_model.FileContainer.file_category)
+            .options(load_only(file_model.File.tenant,
                                file_model.File.user_id,
                                file_model.File.created_at,
                                file_model.File.name),
-                     selectinload(file_model.File.file_container)
-                     .selectinload(file_container_model.FileContainer.file_category)
-                     .options(load_only(file_category_model.FileCategory.name)),
                      selectinload(file_model.File.file_attributes)
                      .options(load_only(file_attribute_model.FileAttribute.key,
-                                        file_attribute_model.FileAttribute.value)))\
-            .filter(file_model.File.community_id == community_id).order_by(file_model.File.created_at.desc()).limit(limit)
+                                        file_attribute_model.FileAttribute.value)),
+                     contains_eager(file_model.File.file_container)
+                     .contains_eager(file_container_model.FileContainer.file_category))
+            .filter(file_model.File.tenant == tenant)
+            .order_by(file_model.File.created_at.desc())
+            .execution_options(populate_existing=True)
+        )
 
+
+        if category:
+            filequery = filequery.filter(file_container_model.FileContainer.file_category.has(name=category))
+
+
+        # if search attributes are provided
+        if attributes is not None:
+            # iterate over the list
+            for attribute in attributes:
+                # if attribute value is not provided
+                if not attribute.value:
+                    # filter only each attribute key
+                    filequery = filequery.filter(file_model.File.file_attributes.any(key=attribute.key))
+                else:
+                    # else filter attribute key and value
+                    filequery = filequery.filter(
+                        file_model.File.file_attributes.any(key=attribute.key, value=attribute.value))
+
+
+        if user_id is not None:
+            filequery = filequery.filter(file_model.File.user_id == user_id)
+
+        filequery = filequery.limit(limit)
+
+        # if offset is provided
+        if offset:
+            filequery = filequery.offset(offset)
+
+        print(filequery)
+
+        # execute the query
         db_files = (await s.execute(filequery)).scalars()
 
     file_dicts = []
     for file in db_files:
+
         file_dict = get_valid_data(file, file_model.File)
         file_dict["attributes"] = file.file_attributes
         file_dict["file_category"] = file.file_container.file_category.name
         file_dict["file_download_uri"] = f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}"
+
         file_dicts.append(File(**file_dict))
 
     return file_dicts
 
 
-async def get_file(id: uuid.UUID, info):
+async def get_file(info, id: uuid.UUID, category: str = ""):
     """
     Get file specified by id
-    :param id: File uuid
     :param info:
+    :param id: File uuid
+    :param category: file category to filter
     :return: Specified file
     """
     async with get_session() as s:
         filequery = select(file_model.File) \
-            .options(load_only(file_model.File.community_id,
+            .options(load_only(file_model.File.tenant,
                                file_model.File.user_id,
                                file_model.File.created_at,
                                file_model.File.name),
@@ -89,6 +133,9 @@ async def get_file(id: uuid.UUID, info):
                      .options(load_only(file_attribute_model.FileAttribute.key,
                                         file_attribute_model.FileAttribute.value)))\
             .filter(file_model.File.id == id)
+
+        if category:
+            filequery = filequery.filter(file_category_model.FileCategory.name == category)
 
         file = (await s.execute(filequery)).scalars().unique().one()
 
@@ -104,7 +151,8 @@ async def get_file(id: uuid.UUID, info):
     return File(**file_dict)
 
 
-async def add_file(file: UploadFile, name: str, file_category: str, community_id: str, user_id: uuid.UUID = None):
+async def add_file(file: UploadFile, name: str, file_category: str, tenant: str,
+                   attributes: typing.List[AttributeInput] = None, user_id: uuid.UUID = None):
     """
     Add File
     """
@@ -114,7 +162,8 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
             return AddFileError(message="Invalid content_type")
 
         async with get_session() as s:
-            sql_file_category = select(file_category_model.FileCategory).filter(file_category_model.FileCategory.name == file_category)
+            sql_file_category = select(file_category_model.FileCategory)\
+                .filter(file_category_model.FileCategory.name == file_category)
             db_file_category = (await s.execute(sql_file_category)).scalars().first()
 
             if db_file_category is None:
@@ -130,7 +179,7 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
             sql_file_container = select(file_container_model.FileContainer).options(
                 selectinload(file_container_model.FileContainer.storage)) \
                 .filter(file_category_id == file_container_model.FileContainer.file_category_id) \
-                .filter(community_id == file_container_model.FileContainer.community_id)
+                .filter(tenant == file_container_model.FileContainer.tenant)
             db_file_container = (await s.execute(sql_file_container)).scalars().first()
 
             if db_file_container is not None:
@@ -141,7 +190,7 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
             if db_storage is None:
                 if settings.FILESTORE_CREATE_UNKNOWN_STORAGE:
                     # create container
-                    db_storage = storage_model.Storage(name=f"Community {community_id} default storage", community_id=community_id)
+                    db_storage = storage_model.Storage(name=f"Community {tenant} default storage", tenant=tenant)
                     s.add(db_storage)
                     await s.flush()
 
@@ -154,7 +203,7 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
             if db_file_container is None:
                 if settings.FILESTORE_CREATE_UNKNOWN_CONTAINER:
                     db_file_container = file_container_model.FileContainer(
-                        name=f"Community {community_id} default {file_category} container", community_id=community_id, file_category=db_file_category,
+                        name=f"Community {tenant} default {file_category} container", tenant=tenant, file_category=db_file_category,
                         storage=db_storage)
                     s.add(db_file_container)
                     await s.flush()
@@ -165,9 +214,7 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
 
             str_container_id = str(db_file_container.id)
 
-            # TODO Add file Management ...
-
-            db_file = file_model.File(community_id=community_id,
+            db_file = file_model.File(tenant=tenant,
                                        user_id=user_id,
                                        name=name,
                                        file_container=db_file_container)
@@ -183,6 +230,14 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
             s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension", value=os.path.splitext(file.filename)[1][1:]))
             s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
 
+            # Add extra attributes if set
+            if attributes is not None:
+                for attribute in attributes:
+                    # Do not allow to override default attributes
+                    if attribute.key not in (['orig_file_name', 'file_extension', 'media_type', 'file_bytes']):
+                        s.add(file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
+                    else:
+                        return AddFileError(message=f"Forbidden Attribute \"{attribute.key}\"")
 
             targetfile = f"{settings.FILESTORE_LOCAL_BASE_DIR}/{str_storage_id}/{str_container_id}/{str(db_file.id)}"
             move_file(tmpfilename, targetfile)
@@ -191,14 +246,12 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
 
             await s.commit()
 
-        #TODO File Metadata handling ;) ;) ;)
-
         file_dict = db_file.as_dict()
         file_dict["file_category"] = file_category
         file_dict["file_download_uri"] = get_file_download_uri(file_dict["id"])
 
         del file_dict["file_container_id"]
-        del file_dict["community_id"]
+        del file_dict["tenant"]
 
         return AddFile(**file_dict)
 
@@ -206,50 +259,7 @@ async def add_file(file: UploadFile, name: str, file_category: str, community_id
         #TODO Log error
         return AddFileError(message=f"{fnfe.strerror}  {fnfe.filename}")
 
-
-async def add_invoice(file: UploadFile, name: str, community_id: str, user_id: uuid.UUID):
-    return add_file(file, name, "invoice", community_id, user_id)
-
-async def get_invoices(community_id: str, user_id: uuid.UUID, info, limit:int):
-    """
-    Get Invoices for user_id
-    :param info: Info
-    :param community_id: Community id to search for user invoices
-    :param user_id: User id to search invoices for
-    :param limit: limit the amount of returned elements
-    :return: Invoices list
-    """
-    async with get_session() as s:
-
-        filequery = select(file_model.File) \
-            .options(load_only(file_model.File.community_id,
-                               file_model.File.user_id,
-                               file_model.File.created_at,
-                               file_model.File.name),
-                     selectinload(file_model.File.file_container)
-                     .selectinload(file_container_model.FileContainer.file_category)
-                     .options(load_only(file_category_model.FileCategory.name)),
-                     selectinload(file_model.File.file_attributes)
-                     .options(load_only(file_attribute_model.FileAttribute.key,
-                                        file_attribute_model.FileAttribute.value))) \
-            .filter(file_model.File.community_id == community_id) \
-            .filter(file_model.File.user_id == user_id) \
-            .filter(file_category_model.FileCategory.name == "invoice").order_by(file_model.File.created_at.desc()).limit(limit)
-
-        db_files = (await s.execute(filequery)).scalars()
-
-    file_dicts = []
-    for file in db_files:
-        file_dict = get_valid_data(file, file_model.File)
-        file_dict["attributes"] = file.file_attributes
-        file_dict["file_category"] = file.file_container.file_category.name
-        file_dict["file_download_uri"] = f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}"
-        file_dicts.append(File(**file_dict))
-
-    return file_dicts
-
-
-async def get_invoice(id: uuid.UUID, info):
+async def get_file_for_category(category: str, id: uuid.UUID, info):
     """
     Get file specified by id
     :param id: File uuid
@@ -258,7 +268,7 @@ async def get_invoice(id: uuid.UUID, info):
     """
     async with get_session() as s:
         filequery = select(file_model.File) \
-            .options(load_only(file_model.File.community_id,
+            .options(load_only(file_model.File.tenant,
                                file_model.File.user_id,
                                file_model.File.created_at,
                                file_model.File.name),
@@ -269,7 +279,7 @@ async def get_invoice(id: uuid.UUID, info):
                      .options(load_only(file_attribute_model.FileAttribute.key,
                                         file_attribute_model.FileAttribute.value)))\
             .filter(file_model.File.id == id) \
-            .filter(file_category_model.FileCategory.name == "invoice")
+            .filter(file_category_model.FileCategory.name == category)
 
         file = (await s.execute(filequery)).scalars().unique().one()
 

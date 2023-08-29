@@ -15,7 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-from fastapi import FastAPI
+from fastapi import FastAPI, logger
+import logging
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from strawberry.schema.config import StrawberryConfig
@@ -30,6 +31,6 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, config=StrawberryConf
 def create_app():
     app = FastAPI()
     graphql_app = GraphQLRouter(schema, graphiql=True)
-    app.include_router(filestore.router, prefix="/"+settings.HTTP_FILE_DL_ENDPOINT)
+    app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")
     return app

@@ -28,5 +28,6 @@ application = create_app()
 if __name__ == "__main__":
     app.dependencies.check_tmp_dir()
     print("Starting uvicorn server...")
-    uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False, log_level=settings.APP_LOG_LEVEL)
+    uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False)
+#                log_level=settings.APP_LOG_LEVEL, log_config='logging.yaml')
 

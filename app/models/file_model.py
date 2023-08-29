@@ -30,15 +30,17 @@ from . import Base
 
 class File(Base):
     __tablename__ = "files"
+    __table_args__ = {'schema': 'filestore'}
+
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     name: Mapped[str] = mapped_column(nullable=True)
 
     file_attributes: Mapped[List["FileAttribute"]] = relationship(back_populates="file")
 
-    file_container_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("file_containers.id"))
+    file_container_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("filestore.file_containers.id"))
     file_container: Mapped["FileContainer"] = relationship(back_populates="files")
 
-    community_id: Mapped[str] = mapped_column(nullable=False)
+    tenant: Mapped[str] = mapped_column(nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(nullable=True)
 
     created_at: Mapped[datetime.datetime] = mapped_column(server_default=func.now())
@@ -46,7 +48,7 @@ class File(Base):
     def as_dict(self):
         return {
             "id": self.id,
-            "community_id": self.community_id,
+            "tenant": self.tenant,
             "name": self.name,
             "file_container_id": self.file_container_id,
             "created_at": self.created_at

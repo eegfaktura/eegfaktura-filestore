@@ -33,7 +33,9 @@ from . import Base
 
 class FileAttribute(Base):
     __tablename__ = "file_attributes"
-    file_id: Mapped[uuid] = mapped_column(ForeignKey("files.id"), primary_key=True)
+    __table_args__ = {'schema': 'filestore'}
+
+    file_id: Mapped[uuid] = mapped_column(ForeignKey("filestore.files.id"), primary_key=True)
     file: Mapped["File"] = relationship(back_populates="file_attributes")
 
     key: Mapped[str] = mapped_column(primary_key=True)

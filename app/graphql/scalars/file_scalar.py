@@ -23,28 +23,29 @@ from pydantic import Field
 from pydantic import typing
 from strawberry.file_uploads import Upload
 
-from app.graphql.scalars.attribute_scalar import Attribute
+from app.graphql.scalars.attribute_scalar import Attribute, AttributeInput
 
 
 @strawberry.type
 class File:
-    id: typing.Optional[uuid.UUID] = ""
-    community_id: str
-    user_id: typing.Optional[uuid.UUID] = ""
+    id: uuid.UUID
+    tenant: str
+    user_id: typing.Optional[uuid.UUID]
     name: str
     file_category: str
-    attributes: typing.Optional[typing.List[Attribute]] = Field(default_factory=list)
-    file_download_uri: typing.Optional[str] = ""
+    attributes: typing.Optional[typing.List[Attribute]]
+    file_download_uri: str
     created_at: datetime.datetime
 
 
 @strawberry.input
 class AddFileInput:
     file: Upload
-    community_id: str
+    tenant: str
     user_id: typing.Optional[uuid.UUID] = ""
     name: str
     file_category: str
+    attributes: typing.Optional[typing.List[Attribute]] = Field(default_factory=list)
 
 
 @strawberry.type

@@ -53,6 +53,8 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        version_table_schema='filestore',
+        include_schemas=True,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"}
     )
@@ -82,6 +84,7 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
+            context.execute(f"SET search_path TO filestore, public")
             context.run_migrations()
 
 

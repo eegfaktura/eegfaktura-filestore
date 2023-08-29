@@ -18,70 +18,151 @@
 import strawberry
 import uuid
 
+from fastapi import Request, WebSocket
 from pydantic import typing
+from strawberry import BasePermission
 from strawberry.types import Info
+
+from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.graphql.scalars.file_scalar import File
 
 from app.graphql.resolvers.file_resolver import get_files
 from app.graphql.resolvers.file_resolver import get_file
-from app.graphql.resolvers.file_resolver import get_invoices
-from app.graphql.resolvers.file_resolver import get_invoice
 
 
-# TODO implement isAuthenticated Class
-# https://strawberry.rocks/docs/guides/permissions#accessing-user-information
 
 
 @strawberry.type
 class Query:
 
     @strawberry.field
-    async def files(self, info: Info, community_id: str, limit: typing.Optional[int] = 10) -> typing.List[File]:
+    async def files(self,
+                    info: Info,
+                    tenant: str,
+                    attributes: typing.Optional[typing.List[AttributeInput]] = None,
+                    category: typing.Optional[str] = "",
+                    user_id: typing.Optional[uuid.UUID] = None,
+                    limit: typing.Optional[int] = 10,
+                    offset: typing.Optional[int] = 0)\
+            -> typing.Optional[typing.List[File]]:
         """ get all Files
         :param info:
-        :param community_id: Community id to get files for
+        :param tenant: Community id to get files for
+        :param attributes: attributes to filter
+        :param category: file category to filter
+        :param user_id: user id to get files for specific user
         :param limit: limit the amount of returned elements
+        :param offset: result offset
         """
 
-        files = await get_files(community_id, info, limit)
+        files = await get_files(tenant, info, attributes, category, user_id, limit, offset)
         return files
 
+
     @strawberry.field
-    async def invoices(self, info: Info, community_id: str, user_id: uuid.UUID, limit: typing.Optional[int] = 10) -> typing.List[File]:
+    async def invoices(self,
+                       info: Info,
+                       tenant: str,
+                       user_id: uuid.UUID,
+                       attributes: typing.Optional[typing.List[AttributeInput]] = None,
+                       limit: typing.Optional[int] = 10,
+                       offset: typing.Optional[int] = 0)\
+            -> typing.Optional[typing.List[File]]:
         """ get invoices for User
         :param info:
-        :param community_id: Community id to get invoices for
+        :param tenant: Community id to get invoices for
         :param user_id: User id to get the invoices for
+        :param attributes: attributes to filter
         :param limit: limit the amount of returned elements
+        :param offset: result offset
         """
-        try:
-            files = await get_invoices(community_id, user_id, info, limit)
-            return files
-        except:
-            return [None]
+
+        files = await get_files(tenant, info, attributes, "invoice", user_id, limit, offset)
+        return files
+
 
     @strawberry.field
-    async def file(self, info: Info, id: uuid.UUID) -> typing.Optional[File]:
+    async def contracts(self,
+                        info: Info,
+                        tenant: str,
+                        user_id: uuid.UUID,
+                        attributes: typing.Optional[typing.List[AttributeInput]] = None,
+                        limit: typing.Optional[int] = 10,
+                        offset: typing.Optional[int] = 0)\
+            -> typing.Optional[typing.List[File]]:
+        """ get invoices for User
+        :param info:
+        :param tenant: Community id to get invoices for
+        :param user_id: User id to get the invoices for
+        :param attributes: attributes to filter
+        :param limit: limit the amount of returned elements
+        :param offset: result offset
+        """
+
+        files = await get_files(tenant, info, attributes, "contract", user_id, limit, offset)
+        return files
+
+
+    @strawberry.field
+    async def file(self,
+                   info: Info,
+                   id: uuid.UUID)\
+            -> typing.Optional[File]:
         """
         get file
         :param info:
         :param id: File UUID
         :return: File object
         """
-        try:
-            file = await get_file(id, info)
-            return file
-        except:
-            return None
 
-    @strawberry.field
-    async def invoice(self, info: Info, id: uuid.UUID) -> typing.Optional[File]:
-        """
-        get file
-        :param info:
-        :param id: File UUID
-        :return: File object
-        """
-
-        file = await get_invoice(id, info)
+        file = await get_file(id, info)
         return file
+
+    @strawberry.field
+    async def invoice(self,
+                      info: Info,
+                      id: uuid.UUID)\
+            -> typing.Optional[File]:
+        """
+        get file
+        :param info:
+        :param id: File UUID
+        :return: File object
+        """
+
+        file = await get_file(info, id, "invoice")
+        return file
+
+    @strawberry.field
+    async def contract(self,
+                       info: Info,
+                       id: uuid.UUID)\
+            -> typing.Optional[File]:
+        """
+        get file
+        :param info:
+        :param id: File UUID
+        :return: File object
+        """
+
+        file = await get_file(info, id, "contract")
+        return file
+
+    @strawberry.field
+    async def rc_contracts(self,
+                           info: Info,
+                           tenant: str,
+                           attributes: typing.Optional[typing.List[AttributeInput]] = None,
+                           limit: typing.Optional[int] = 10,
+                           offset: typing.Optional[int] = 0) \
+            -> typing.Optional[typing.List[File]]:
+        """ get invoices for User
+        :param info:
+        :param tenant: Community id to get invoices for
+        :param attributes: attributes to filter
+        :param limit: limit the amount of returned elements
+        :param offset: result offset
+        """
+
+        files = await get_files(tenant, info, attributes, "contract", None, limit, offset)
+        return files

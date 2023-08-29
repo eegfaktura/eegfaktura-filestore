@@ -20,13 +20,13 @@ import os
 from pydantic import BaseSettings
 
 class Settings(BaseSettings):
-    APP_TITLE: str="VFEEG Filestore"
+    APP_TITLE: str="eegFaktura Filestore"
     APP_VERSION: str="0.0.1"
     APP_LOG_LEVEL: str="info"
     #Load Database config from ENV
     DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
     DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")
-    DB_PASSWORD: str = os.environ.get("DB_PASSWORD", "PLktbxj9jtmGeHwMDc6S")
+    DB_PASSWORD: str = os.environ.get("DB_PASSWORD", "")
     DB_DATABASE: str = os.environ.get("DB_DATABASE", "filestore")
     DB_PORT: int = int(os.environ.get("DB_PORT", 5432))
     DB_DSN: str = f"postgresql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOSTNAME}:{DB_PORT}/{DB_DATABASE}"

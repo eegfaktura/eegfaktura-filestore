@@ -33,16 +33,18 @@ from . import Base
 
 class FileContainer(Base):
     __tablename__ = "file_containers"
+    __table_args__ = {'schema': 'filestore'}
+
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     name: Mapped[str] = mapped_column(nullable=True)
     configuration: Mapped[dict[str, Any]] = mapped_column(nullable=True)
 
-    file_category_id:  Mapped[uuid.UUID] = mapped_column(ForeignKey("file_categories.id"))
+    file_category_id:  Mapped[uuid.UUID] = mapped_column(ForeignKey("filestore.file_categories.id"))
     file_category: Mapped["FileCategory"] = relationship(back_populates="file_containers")
 
-    community_id: Mapped[str] = mapped_column(nullable=False)
+    tenant: Mapped[str] = mapped_column(nullable=False)
 
-    storage_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("storages.id"))
+    storage_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("filestore.storages.id"))
     storage: Mapped["Storage"] = relationship(back_populates="file_containers")
 
     files: Mapped[List["File"]] = relationship(back_populates="file_container")

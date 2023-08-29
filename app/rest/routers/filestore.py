@@ -121,7 +121,7 @@ async def download_file(file_id: uuid.UUID):
 
 
 @router.post(
-    "/upload/{file_category}/{community_id}/{user_id}",
+    "/upload/{file_category}/{tenant}/{user_id}",
     response_model=FileUploadResponse,
     responses={
         400: {"model": ErrorMessage, "description": "Issues during file creation"},
@@ -141,7 +141,7 @@ async def download_file(file_id: uuid.UUID):
         }
     }
 )
-async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, community_id: str,
+async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenant: str,
                         user_id: uuid.UUID) -> FileUploadResponse:
     """ Add file """
     # TODO name determination
@@ -170,7 +170,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, commu
             sql_file_container = select(file_container_model.FileContainer).options(
                 selectinload(file_container_model.FileContainer.storage)) \
                 .filter(file_category_id == file_container_model.FileContainer.file_category_id) \
-                .filter(community_id == file_container_model.FileContainer.community_id)
+                .filter(tenant == file_container_model.FileContainer.tenant)
             db_file_container = (await s.execute(sql_file_container)).scalars().first()
 
             if db_file_container is not None:
@@ -181,8 +181,8 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, commu
             if db_storage is None:
                 if settings.FILESTORE_CREATE_UNKNOWN_STORAGE:
                     # create container
-                    db_storage = storage_model.Storage(name=f"Community {community_id} default storage",
-                                                       community_id=community_id)
+                    db_storage = storage_model.Storage(name=f"Community {tenant} default storage",
+                                                       tenant=tenant)
                     s.add(db_storage)
                     await s.flush()
 
@@ -195,7 +195,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, commu
             if db_file_container is None:
                 if settings.FILESTORE_CREATE_UNKNOWN_CONTAINER:
                     db_file_container = file_container_model.FileContainer(
-                        name=f"Community {community_id} default {file_category} container", community_id=community_id,
+                        name=f"Community {tenant} default {file_category} container", tenant=tenant,
                         file_category=db_file_category,
                         storage=db_storage)
                     s.add(db_file_container)
@@ -209,7 +209,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, commu
 
             # TODO Add file Management ...
 
-            db_file = file_model.File(community_id=community_id,
+            db_file = file_model.File(tenant=tenant,
                                       user_id=user_id,
                                       name=name,
                                       file_container=db_file_container)
@@ -248,8 +248,8 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, commu
         raise HTTPException(status_code=400, detail=f"{fnfe.strerror} {fnfe.filename}")
 
 
-#@router.post("/upload/{file_category}/{community_id}")
-#async def add_community_file(self, file: UploadFile, file_category: FileCategoryEnum, community_id: str):
+#@router.post("/upload/{file_category}/{tenant}")
+#async def add_community_file(self, file: UploadFile, file_category: FileCategoryEnum, tenant: str):
 #    """ Add file """
 #
 #    # TODO upload function for communtiy global files
