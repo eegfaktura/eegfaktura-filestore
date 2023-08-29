@@ -24,8 +24,8 @@ from strawberry.types import Info
 from strawberry.file_uploads import Upload
 
 from app.graphql.scalars.attribute_scalar import AttributeInput
-from app.graphql.scalars.file_scalar import AddFileResponse
-from app.graphql.resolvers.file_resolver import add_file
+from app.graphql.scalars.file_scalar import AddFileResponse, DeleteFileResponse
+from app.graphql.resolvers.file_resolver import add_file, delete_file
 
 # TODO implement isAuthenticated Class
 # https://strawberry.rocks/docs/guides/permissions#accessing-user-information
@@ -47,3 +47,9 @@ class Mutation:
     async def read_file(self, file: Upload) -> str:
         await file.read()
         return file.filename + " " + file.content_type
+
+    @strawberry.mutation
+    async def delete_file(self, file_id: uuid.UUID) -> DeleteFileResponse:
+        """ Add file """
+        delete_file_response = await delete_file(file_id)
+        return delete_file_response

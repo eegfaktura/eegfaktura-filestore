@@ -58,6 +58,12 @@ class AddFile:
     file_download_uri: typing.Optional[str] = ""
     created_at: datetime.datetime
 
+
+@strawberry.type
+class DeleteFile:
+    id: uuid.UUID
+    message: str ="File deleted"
+
 @strawberry.type
 class FileExists:
     message: str = "File with same name, category and username already exists for this community"
@@ -65,6 +71,10 @@ class FileExists:
 
 @strawberry.type
 class AddFileError:
+    message: str = ""
+
+@strawberry.type
+class DeleteFileError:
     message: str = ""
 
 @strawberry.type
@@ -81,7 +91,6 @@ class CommunityMissing:
 class NameMissing:
     message: str = "Required name is missing"
 
-
 @strawberry.type
 class FileCategoryMissing:
     message: str = "Required file category is missing"
@@ -95,11 +104,11 @@ class NoFileContainerFound:
     message: str = "No container for community and filetype found"
 
 
-@strawberry.type
-class FileDeleted:
-    message: str = "File successfully deleted"
-
 
 AddFileResponse = strawberry.union(
     "AddFileResponse", [AddFile, AddFileError]
+)
+
+DeleteFileResponse = strawberry.union(
+    "DeleteFileResponse", [DeleteFile, DeleteFileError]
 )
