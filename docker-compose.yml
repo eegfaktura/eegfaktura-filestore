@@ -33,7 +33,6 @@ services:
     volumes:
       - ./eegfaktura-filestore-data:/eegfaktura-filestore-data
     environment:
-      FLASK_DEBUG: "false"
       APP_LOG_LEVEL: "debug"
       DB_HOSTNAME: "eegfaktura-db"
       DB_USERNAME: "eegfaktura"
