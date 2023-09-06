@@ -23,7 +23,7 @@ import time
 
 import aiofiles
 import shutil
-from pathlib import Path
+import urllib
 
 import uuid
 from datetime import datetime
@@ -37,6 +37,8 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_session
 from app.config import settings
 from app.models import file_model, file_container_model, storage_model
+
+from fastapi import Request
 
 
 def convert_camel_case(name):
@@ -194,3 +196,16 @@ def check_tmp_dir():
     if not os.path.isdir(settings.FILESTORE_TEMP_DIR):
         # TODO Log file creation
         os.mkdir(settings.FILESTORE_TEMP_DIR, mode=0o660)
+
+def get_absolute_url(url: str, request: Request):
+    # test if is absolute URL
+    if urllib.parse.urlparse(url).scheme != "":
+        # if 0.0.0.0 is in url (placeholder for replacing with current hostname)
+        if "://0.0.0.0" in url:
+            return url.replace("://0.0.0.0", f"://{request.url.hostname}")
+
+        return url
+
+    else:
+        return f"{request.url.scheme}://{request.url.hostname}"
+

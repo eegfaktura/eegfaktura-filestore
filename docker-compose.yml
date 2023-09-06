@@ -20,8 +20,8 @@ services:
     healthcheck:
       test: "PGPASSWORD=$${DB_PASSWORD} pg_isready -d $${DB_DATABASE} -U $${DB_USERNAME} && psql --d $${DB_DATABASE} -U $${DB_USERNAME} --list"
       timeout: 10s
-      start_period: 15s
-      interval: 60s
+      start_period: 10s
+      interval: 10s
       retries: 20
 
   eegfaktura-filestore:
@@ -33,14 +33,13 @@ services:
     volumes:
       - ./eegfaktura-filestore-data:/eegfaktura-filestore-data
     environment:
-      APP_LOG_LEVEL: "debug"
       DB_HOSTNAME: "eegfaktura-db"
       DB_USERNAME: "eegfaktura"
       DB_PASSWORD: "nAjk85YwUOplsXaA"
       DB_DATABASE: "eegfaktura"
       DB_PORT: 5432
       HTTP_PROTOCOL: "http"
-      HTTP_HOSTNAME: "192.168.108.13"
+      HTTP_HOSTNAME: "0.0.0.0"
       HTTP_PORT: 5000
       HTTP_FILE_DL_ENDPOINT: "filestore"
       FILESTORE_LOCAL_BASE_DIR: "/eegfaktura-filestore-data"

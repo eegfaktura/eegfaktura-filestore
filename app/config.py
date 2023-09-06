@@ -20,9 +20,9 @@ import os
 from pydantic import BaseSettings
 
 class Settings(BaseSettings):
-    APP_TITLE: str="eegFaktura Filestore"
-    APP_VERSION: str="0.0.1"
-    APP_LOG_LEVEL: str="info"
+    APP_TITLE: str = "eegFaktura Filestore"
+    APP_VERSION: str = "0.1.0"
+    APP_LOG_LEVEL: str = "info"
     #Load Database config from ENV
     DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
     DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")

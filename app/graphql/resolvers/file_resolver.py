@@ -27,7 +27,7 @@ from sqlalchemy.orm import load_only, selectinload, contains_eager
 from app.config import settings
 
 from app.db.session import get_session
-from app.dependencies import get_valid_data, get_file_download_uri, upload_file, move_file, delete_file
+from app.dependencies import get_valid_data, get_file_download_uri, upload_file, move_file, get_absolute_url
 from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, AddFile, AddFileError, DeleteFile, DeleteFileError
@@ -96,7 +96,8 @@ async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], 
         file_dict = get_valid_data(file, file_model.File)
         file_dict["attributes"] = file.file_attributes
         file_dict["file_category"] = file.file_container.file_category.name
-        file_dict["file_download_uri"] = f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}"
+        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
+                                                          info.context["request"])
 
         file_dicts.append(File(**file_dict))
 
@@ -136,7 +137,8 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
     file_dict = get_valid_data(file, file_model.File)
     file_dict["attributes"] = file.file_attributes
     file_dict["file_category"] = file.file_container.file_category.name
-    file_dict["file_download_uri"] = f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}"
+    file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
+                                                          info.context["request"])
 
     return File(**file_dict)
 
@@ -242,7 +244,8 @@ async def add_file(file: UploadFile, name: str, file_category: str, tenant: str,
 
         file_dict = db_file.as_dict()
         file_dict["file_category"] = file_category
-        file_dict["file_download_uri"] = get_file_download_uri(file_dict["id"])
+        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
+                                                          info.context["request"])
 
         del file_dict["file_container_id"]
         del file_dict["tenant"]
@@ -284,7 +287,8 @@ async def get_file_for_category(category: str, id: uuid.UUID, info):
     file_dict = get_valid_data(file, file_model.File)
     file_dict["attributes"] = file.file_attributes
     file_dict["file_category"] = file.file_container.file_category.name
-    file_dict["file_download_uri"] = f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}"
+    file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
+                                                          info.context["request"])
 
     return File(**file_dict)
 
