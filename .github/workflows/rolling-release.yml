@@ -1,0 +1,85 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - v*
+
+env:
+  REGISTRY: "ghcr.io"
+  IMAGE_NAME: ${{ github.repository || 'eegfaktura-postfix' }}
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # list of Docker images to use as base name for tags
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # generate Docker tags based on the following events/attributes
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          # generate Docker labels based on the following events/attributes
+          labels: |
+            org.opencontainers.image.title="eegfaktura-filestore"
+            org.opencontainers.image.description="EEG Faktura filestore service container handling the file upload and download"
+            org.opencontainers.image.source=${{ github.event.repository.html_url || '' }}
+            org.opencontainers.image.url=${{ github.event.repository.html_url || '' }}
+            org.opencontainers.image.version=${{ github.sha || '' }}
+            org.opencontainers.image.revision=${{ github.sha || '' }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp || '' }}
+            org.opencontainers.image.authors="eegfaktura@vfeeg.org"
+            org.opencontainers.image.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
+            org.opencontainers.image.licenses=${{ github.event.repository.license.spdx_id || '' }}
+            org.opencontainers.image.ref.name=${{ github.ref || '' }}
+            org.opencontainers.image.ref.branch=${{ github.ref_type == 'branch' && github.ref || '' }}
+            org.opencontainers.image.ref.tag=${{ github.ref_type == 'tag' && github.ref || '' }}
+            org.opencontainers.image.ref.sha=${{ github.sha || '' }}
+            org.opencontainers.image.repository=${{ github.repository || '' }}
+            org.opencontainers.image.repository.url=${{ github.event.repository.html_url || '' }}
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags || 'latest' }}
+          labels: ${{ steps.meta.outputs.labels || '' }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
