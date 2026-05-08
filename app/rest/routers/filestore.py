@@ -20,12 +20,13 @@ import urllib
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from starlette.responses import JSONResponse
 
+from app.auth import Claims, get_claims
 from app.config import settings
 from app.db.session import get_session
 from app.dependencies import get_file_download_metadata, upload_file, move_file, get_file_download_uri
@@ -45,7 +46,7 @@ router = APIRouter()
         400: {"model": ErrorMessage, "description": "Error Message"}
     }
 )
-async def endoint_without_parameters():
+async def endoint_without_parameters(claims: Claims = Depends(get_claims)):
     return JSONResponse(status_code=400, content={"detail": "No parameter given"})
 
 
@@ -61,13 +62,15 @@ async def endoint_without_parameters():
         }
     }
 )
-async def download_file(file_id: uuid.UUID):
+async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)):
     metadata = await get_file_download_metadata(file_id)
 
     # Test if file entry was found
     if not metadata:
         # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 1")
+
+    claims.assert_tenant(metadata["tenant"])
 
     # Test if file container is present
     if "file_container_id" not in metadata or \
@@ -88,8 +91,6 @@ async def download_file(file_id: uuid.UUID):
             metadata["file_attributes"]["file_extension"] is None:
         # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 4")
-
-    # TODO Check Rights to download file
 
     if not os.path.isdir(settings.FILESTORE_LOCAL_BASE_DIR):
         # TODO Logging
@@ -142,8 +143,11 @@ async def download_file(file_id: uuid.UUID):
     }
 )
 async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenant: str,
-                        user_id: uuid.UUID) -> FileUploadResponse:
+                        user_id: uuid.UUID,
+                        claims: Claims = Depends(get_claims)) -> FileUploadResponse:
     """ Add file """
+    claims.assert_tenant(tenant)
+
     # TODO name determination
     try:
         # first check if filetype is allowed to upload

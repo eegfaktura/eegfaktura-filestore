@@ -43,6 +43,8 @@ async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], 
     :param attributes: attributes list the file entry must have
     :return: Commmunity file list
     """
+    info.context["claims"].assert_tenant(tenant)
+
     async with get_session() as s:
 
         filequery = (
@@ -134,6 +136,8 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
     if file is None:
         raise Exception("Cant't find file")
 
+    info.context["claims"].assert_tenant(file.tenant)
+
     file_dict = get_valid_data(file, file_model.File)
     file_dict["attributes"] = file.file_attributes
     file_dict["file_category"] = file.file_container.file_category.name
@@ -143,11 +147,13 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
     return File(**file_dict)
 
 
-async def add_file(file: UploadFile, name: str, file_category: str, tenant: str,
+async def add_file(info, file: UploadFile, name: str, file_category: str, tenant: str,
                    attributes: typing.List[AttributeInput] = None, user_id: uuid.UUID = None):
     """
     Add File
     """
+    info.context["claims"].assert_tenant(tenant)
+
     try:
         # first check if filetype is allowed to upload
         if file.content_type not in allowed_media_types:
@@ -284,6 +290,8 @@ async def get_file_for_category(category: str, id: uuid.UUID, info):
     if file is None:
         raise Exception("Cant't find file")
 
+    info.context["claims"].assert_tenant(file.tenant)
+
     file_dict = get_valid_data(file, file_model.File)
     file_dict["attributes"] = file.file_attributes
     file_dict["file_category"] = file.file_container.file_category.name
@@ -293,7 +301,7 @@ async def get_file_for_category(category: str, id: uuid.UUID, info):
     return File(**file_dict)
 
 
-async def delete_file(id: uuid.UUID):
+async def delete_file(info, id: uuid.UUID):
     """
     Delete file specified by id
     :param id: File uuid
@@ -312,6 +320,8 @@ async def delete_file(id: uuid.UUID):
 
         if file is None:
             return DeleteFileError(message=f"Unable to find file with id {id}")
+
+        info.context["claims"].assert_tenant(file.tenant)
 
         storagequery = select(storage_model.Storage) \
             .options(load_only(storage_model.Storage.id)).\
