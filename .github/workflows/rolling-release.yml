@@ -1,3 +1,11 @@
+# Ziel: ERSETZT die bestehende rolling-release.yml in eegfaktura/eegfaktura-filestore.
+# Unterschied zum aktuellen Stand: zusaetzlicher Job `dispatch-deploy` am Ende,
+# der das Platform-Repo (vfeeg-development/eegfaktura-platform) ueber einen
+# erfolgreichen Build benachrichtigt.
+#
+# Vorbedingung: Repo-Secret `PLATFORM_DEPLOY_PAT` muss gesetzt sein
+# (Classic PAT mit Scope `repo` auf vfeeg-development/eegfaktura-platform).
+
 name: Docker Image CI
 
 on:
@@ -30,10 +38,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # list of Docker images to use as base name for tags
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # generate Docker tags based on the following events/attributes
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
@@ -41,7 +47,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-          # generate Docker labels based on the following events/attributes
+            type=sha,format=short,prefix=sha-
           labels: |
             org.opencontainers.image.title="eegfaktura-filestore"
             org.opencontainers.image.description="EEG Faktura filestore service container handling the file upload and download"
@@ -80,6 +86,33 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  # Triggert das Platform-Repo, damit es den Cluster aktualisiert.
+  # Laeuft nur bei push to default-branch (main/master), nicht bei PRs oder Tags
+  # (Tags loesen vermutlich eine andere, kontrolliertere Release-Pipeline aus).
+  dispatch-deploy:
+    needs: build-and-push-image
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy in platform repo
+        env:
+          GH_TOKEN: ${{ secrets.PLATFORM_DEPLOY_PAT }}
+        run: |
+          PAYLOAD=$(cat <<EOF
+          {
+            "event_type": "deploy-filestore",
+            "client_payload": {
+              "image_tag": "latest",
+              "source_sha": "${GITHUB_SHA}",
+              "source_repo": "${GITHUB_REPOSITORY}",
+              "source_ref": "${GITHUB_REF}"
+            }
+          }
+          EOF
+          )
+          echo "$PAYLOAD" | gh api repos/vfeeg-development/eegfaktura-platform/dispatches --input -
+          echo "Dispatched deploy-filestore for sha=${GITHUB_SHA:0:8}"
