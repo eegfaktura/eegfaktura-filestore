@@ -20,6 +20,7 @@ import logging
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from strawberry.schema.config import StrawberryConfig
+from app.auth import gql_context
 from app.graphql.schemas.mutation_schema import Mutation
 from app.graphql.schemas.query_schema import Query
 from app.rest.routers import filestore
@@ -30,7 +31,11 @@ schema = strawberry.Schema(query=Query, mutation=Mutation, config=StrawberryConf
 
 def create_app():
     app = FastAPI()
-    graphql_app = GraphQLRouter(schema, graphiql=True)
+    graphql_app = GraphQLRouter(
+        schema,
+        context_getter=gql_context,
+        graphiql=settings.GRAPHIQL_ENABLED,
+    )
     app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")
     return app

@@ -37,10 +37,10 @@ import strawberry
 @strawberry.type
 class Mutation:
     @strawberry.mutation
-    async def add_file(self, file: Upload, name: str, file_category: str, tenant: str,
+    async def add_file(self, info: Info, file: Upload, name: str, file_category: str, tenant: str,
                        attributes: typing.List[AttributeInput] = None, user_id: uuid.UUID = None) -> AddFileResponse:
         """ Add file """
-        add_file_response = await add_file(file, name, file_category, tenant, attributes, user_id)
+        add_file_response = await add_file(info, file, name, file_category, tenant, attributes, user_id)
         return add_file_response
 
     @strawberry.mutation
@@ -49,7 +49,7 @@ class Mutation:
         return file.filename + " " + file.content_type
 
     @strawberry.mutation
-    async def delete_file(self, file_id: uuid.UUID) -> DeleteFileResponse:
+    async def delete_file(self, info: Info, file_id: uuid.UUID) -> DeleteFileResponse:
         """ Add file """
-        delete_file_response = await delete_file(file_id)
+        delete_file_response = await delete_file(info, file_id)
         return delete_file_response

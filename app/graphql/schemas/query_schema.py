@@ -115,7 +115,7 @@ class Query:
         :return: File object
         """
 
-        file = await get_file(id, info)
+        file = await get_file(info, id)
         return file
 
     @strawberry.field

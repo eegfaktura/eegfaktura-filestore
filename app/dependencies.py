@@ -93,6 +93,7 @@ async def get_file_download_metadata(file_id: uuid.UUID):
                 file_metadata_dict = {
                     "name": file.name,
                     "file_id": file.id,
+                    "tenant": file.tenant,
                     "file_attributes": {att.key: att.value for att in file.file_attributes}
                 }
 
