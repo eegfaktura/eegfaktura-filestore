@@ -62,7 +62,7 @@ def get_claims(
             creds.credentials,
             _PUBLIC_KEY,
             algorithms=["RS256"],
-            options={"require": ["exp"]},
+            options={"require": ["exp"], "verify_aud": False},
         )
     except jwt.PyJWTError:
         raise HTTPException(
