@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     FILESTORE_CREATE_UNKNOWN_STORAGE: bool = bool(os.environ.get("FILESTORE_CREATE_UNKNOWN_STORAGE", "false"))
 
     JWT_PUBLIC_KEY_FILE: str= os.environ.get("JWT_KEY_FILE", "jwt_pub_key.pem")
+    JWT_AUDIENCE: str = os.environ.get("JWT_AUDIENCE", "account")
     GRAPHIQL_ENABLED: bool = os.environ.get("GRAPHIQL_ENABLED", "false").lower() == "true"
 settings = Settings()
 

@@ -62,6 +62,7 @@ def get_claims(
             creds.credentials,
             _PUBLIC_KEY,
             algorithms=["RS256"],
+            audience=settings.JWT_AUDIENCE,
             options={"require": ["exp"]},
         )
     except jwt.PyJWTError:
