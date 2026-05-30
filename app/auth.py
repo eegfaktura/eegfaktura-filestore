@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+import logging
 from typing import List, Optional
 
 import jwt
@@ -23,6 +24,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _load_public_key() -> str:
@@ -65,7 +68,8 @@ def get_claims(
             audience=settings.JWT_AUDIENCE,
             options={"require": ["exp"]},
         )
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        logger.warning("JWT decode failed: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
