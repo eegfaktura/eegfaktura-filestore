@@ -250,7 +250,7 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
 
         file_dict = db_file.as_dict()
         file_dict["file_category"] = file_category
-        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
+        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{db_file.id}",
                                                           info.context["request"])
 
         del file_dict["file_container_id"]
