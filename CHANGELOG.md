@@ -1,30 +1,30 @@
 # Changelog
 
-Alle nennenswerten Änderungen an **eegfaktura-filestore (Python FastAPI File-Store)** werden hier dokumentiert.
+All notable changes to **eegfaktura-filestore (Python FastAPI file store)** are documented here.
 
-Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
-die Versionierung an den Deployment-Release-Tags. Detail-Diffs bleiben im `git log`;
-dieser Changelog hebt die für Überblick und Betrieb relevanten Änderungen hervor.
+The format is based on [Keep a Changelog](https://keepachangelog.com/), and
+versioning follows the deployment release tags. Detailed diffs stay in the `git log`;
+this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
 ## [1.0.0] – 2026-06-28
 
-Teil des einheitlichen Source-Build-Cutovers der eegfaktura-Suite.
+Part of the unified source-build cutover of the eegfaktura suite.
 
 ### Changed
-- CI: Push in den Development-Tier der Registry (ADR-0005). (#6)
-- README mit Service-Überblick und Tech-Stack ergänzt. (#8)
+- CI: push to the registry's development tier (ADR-0005). (#6)
+- Added README with service overview and tech stack. (#8)
 
 ## [0.x] – 2026-05
 
 ### Added
-- JWT-Authentifizierung und Tenant-Enforcement für GraphQL-/REST-Endpunkte.
+- JWT authentication and tenant enforcement for the GraphQL/REST endpoints.
 
 ### Fixed
-- Download-URI im `add_file`-Resolver nutzt `db_file.id`. (#5)
-- Auth: spezifischer PyJWT-Exception-Typ + Meldung werden geloggt. (#4)
-- Auth: `audience` an PyJWT-`decode` übergeben (Konfig `JWT_AUDIENCE`). (#3)
+- Download URI in the `add_file` resolver uses `db_file.id`. (#5)
+- Auth: logs the specific PyJWT exception type and message. (#4)
+- Auth: pass `audience` to PyJWT `decode` (config `JWT_AUDIENCE`). (#3)
 
 ### Security
-- `pyjwt` auf 2.12.1 angehoben (behebt CVE-2026-32597).
+- Bumped `pyjwt` to 2.12.1 (clears CVE-2026-32597).
