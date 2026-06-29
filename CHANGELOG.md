@@ -8,6 +8,12 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.1] – 2026-06-29
+
+### Fixed
+- Superuser cross-tenant access: mirror the backend `superuser` realm-role bypass so superusers can read/upload documents across communities. (#12)
+- GEA stem tenant for document storage: normalize the tenant to its stem (rcNumber) so GEA sub-communities (e.g. `GC106668-003`) store and read under `GC106668`; fixes empty document lists and the `varchar(8)` upload error. (#13)
+
 ## [1.0.0] – 2026-06-28
 
 Part of the unified source-build cutover of the eegfaktura suite.
