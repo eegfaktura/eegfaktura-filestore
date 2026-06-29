@@ -42,12 +42,25 @@ _bearer = HTTPBearer(auto_error=True)
 class Claims(BaseModel):
     tenants: List[str] = Field(default_factory=list, alias="tenant")
     preferred_username: Optional[str] = None
+    realm_access: dict = Field(default_factory=dict)
 
     class Config:
         allow_population_by_field_name = True
         extra = "ignore"
 
+    @property
+    def roles(self) -> List[str]:
+        return (self.realm_access or {}).get("roles", []) or []
+
+    def is_superuser(self) -> bool:
+        # Mirrors eegfaktura-backend: the realm role "superuser" grants
+        # cross-tenant access and skips the tenant-claim membership check
+        # (see api/middleware/tokenVerifier.go). Case-sensitive, like the backend.
+        return "superuser" in self.roles
+
     def assert_tenant(self, tenant: str) -> None:
+        if self.is_superuser():
+            return
         wanted = (tenant or "").upper()
         allowed = {t.upper() for t in self.tenants}
         if wanted not in allowed:
