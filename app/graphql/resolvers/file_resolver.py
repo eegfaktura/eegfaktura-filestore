@@ -24,6 +24,7 @@ from fastapi import UploadFile
 from sqlalchemy import select, delete
 from sqlalchemy.orm import load_only, selectinload, contains_eager
 
+from app.auth import base_tenant
 from app.config import settings
 
 from app.db.session import get_session
@@ -44,6 +45,7 @@ async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], 
     :return: Commmunity file list
     """
     info.context["claims"].assert_tenant(tenant)
+    tenant = base_tenant(tenant)
 
     async with get_session() as s:
 
@@ -153,6 +155,7 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
     Add File
     """
     info.context["claims"].assert_tenant(tenant)
+    tenant = base_tenant(tenant)
 
     try:
         # first check if filetype is allowed to upload

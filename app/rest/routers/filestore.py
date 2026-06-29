@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from starlette.responses import JSONResponse
 
-from app.auth import Claims, get_claims
+from app.auth import Claims, get_claims, base_tenant
 from app.config import settings
 from app.db.session import get_session
 from app.dependencies import get_file_download_metadata, upload_file, move_file, get_file_download_uri
@@ -147,6 +147,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
                         claims: Claims = Depends(get_claims)) -> FileUploadResponse:
     """ Add file """
     claims.assert_tenant(tenant)
+    tenant = base_tenant(tenant)
 
     # TODO name determination
     try:
