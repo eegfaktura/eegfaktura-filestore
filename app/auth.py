@@ -39,6 +39,19 @@ _PUBLIC_KEY: str = _load_public_key()
 _bearer = HTTPBearer(auto_error=True)
 
 
+def base_tenant(tenant: str) -> str:
+    """Map a tenant id to the stem tenant used for document storage.
+
+    GEA sub-communities carry a sub-number in their tenant id
+    ("GC106668-003"), but the filestore groups all sub-communities of a GEA
+    under the stem tenant (the rcNumber, "GC106668"): storages, containers and
+    files are stored under that stem. Strip the sub-number so storage lookups
+    and the tenant check use the stem form. Non-GEA tenants have no dash and
+    are returned unchanged.
+    """
+    return (tenant or "").split("-", 1)[0]
+
+
 class Claims(BaseModel):
     tenants: List[str] = Field(default_factory=list, alias="tenant")
     preferred_username: Optional[str] = None
@@ -61,8 +74,8 @@ class Claims(BaseModel):
     def assert_tenant(self, tenant: str) -> None:
         if self.is_superuser():
             return
-        wanted = (tenant or "").upper()
-        allowed = {t.upper() for t in self.tenants}
+        wanted = base_tenant(tenant).upper()
+        allowed = {base_tenant(t).upper() for t in self.tenants}
         if wanted not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
