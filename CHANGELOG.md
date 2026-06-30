@@ -8,6 +8,12 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- Security: `FILESTORE_CREATE_UNKNOWN_*` flags were parsed with `bool(os.environ.get(..., "false"))`,
+  where any non-empty string (including `"false"`) is truthy — so auto-creation of unknown
+  storage/container/category was effectively always ON and could not be disabled via `false`.
+  Parse with an explicit truthy-string check (`_env_bool`, default `False`). (#7)
+
 ## [1.0.1] – 2026-06-29
 
 ### Fixed
