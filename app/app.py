@@ -35,6 +35,10 @@ def create_app():
         schema,
         context_getter=gql_context,
         graphql_ide="graphiql" if settings.GRAPHIQL_ENABLED else None,
+        # Strawberry disables GraphQL multipart file uploads by default since ~0.236
+        # (CSRF hardening); the filestore's add_file mutation depends on them, so
+        # re-enable explicitly. Without this, uploads fail with "Unsupported content type".
+        multipart_uploads_enabled=True,
     )
     app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")
