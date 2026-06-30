@@ -19,6 +19,14 @@ import os
 
 from pydantic import BaseSettings
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    # bool("false") is True (any non-empty string is truthy), so the flags below
+    # must not be parsed with bool(). Treat only explicit truthy strings as True;
+    # the safe default is False (auto-creation off unless explicitly enabled).
+    return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
+
+
 class Settings(BaseSettings):
     APP_TITLE: str = "eegFaktura Filestore"
     APP_VERSION: str = "0.1.0"
@@ -39,9 +47,9 @@ class Settings(BaseSettings):
     HTTP_FILE_DL_BASE_URI: str = os.environ.get("HTTP_FILE_DL_BASE_URI", f"{HTTP_BASE_URI}/{HTTP_FILE_DL_ENDPOINT}")
     FILESTORE_LOCAL_BASE_DIR: str = os.environ.get("FILESTORE_LOCAL_BASE_DIR", "/vfeeg-filestore-data")
     FILESTORE_TEMP_DIR: str = os.environ.get("FILESTORE_TEMP_DIR", f"{FILESTORE_LOCAL_BASE_DIR}/tmp")
-    FILESTORE_CREATE_UNKNOWN_CATEGORY: bool = bool(os.environ.get("FILESTORE_CREATE_UNKNOWN_CATEGORY", "false"))
-    FILESTORE_CREATE_UNKNOWN_CONTAINER: bool = bool(os.environ.get("FILESTORE_CREATE_UNKNOWN_CONTAINER", "false"))
-    FILESTORE_CREATE_UNKNOWN_STORAGE: bool = bool(os.environ.get("FILESTORE_CREATE_UNKNOWN_STORAGE", "false"))
+    FILESTORE_CREATE_UNKNOWN_CATEGORY: bool = _env_bool("FILESTORE_CREATE_UNKNOWN_CATEGORY")
+    FILESTORE_CREATE_UNKNOWN_CONTAINER: bool = _env_bool("FILESTORE_CREATE_UNKNOWN_CONTAINER")
+    FILESTORE_CREATE_UNKNOWN_STORAGE: bool = _env_bool("FILESTORE_CREATE_UNKNOWN_STORAGE")
 
     JWT_PUBLIC_KEY_FILE: str= os.environ.get("JWT_KEY_FILE", "jwt_pub_key.pem")
     JWT_AUDIENCE: str = os.environ.get("JWT_AUDIENCE", "account")
