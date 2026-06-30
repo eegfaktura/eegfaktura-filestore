@@ -21,7 +21,7 @@ from typing import List, Optional
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.config import settings
 
@@ -57,9 +57,7 @@ class Claims(BaseModel):
     preferred_username: Optional[str] = None
     realm_access: dict = Field(default_factory=dict)
 
-    class Config:
-        allow_population_by_field_name = True
-        extra = "ignore"
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     @property
     def roles(self) -> List[str]:

@@ -20,7 +20,7 @@ import uuid
 
 import strawberry
 from pydantic import Field
-from pydantic import typing
+import typing
 from strawberry.file_uploads import Upload
 
 from app.graphql.scalars.attribute_scalar import Attribute, AttributeInput
@@ -105,10 +105,10 @@ class NoFileContainerFound:
 
 
 
-AddFileResponse = strawberry.union(
-    "AddFileResponse", [AddFile, AddFileError]
-)
+AddFileResponse = typing.Annotated[
+    typing.Union[AddFile, AddFileError], strawberry.union("AddFileResponse")
+]
 
-DeleteFileResponse = strawberry.union(
-    "DeleteFileResponse", [DeleteFile, DeleteFileError]
-)
+DeleteFileResponse = typing.Annotated[
+    typing.Union[DeleteFile, DeleteFileError], strawberry.union("DeleteFileResponse")
+]

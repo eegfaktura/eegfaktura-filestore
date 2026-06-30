@@ -34,7 +34,7 @@ def create_app():
     graphql_app = GraphQLRouter(
         schema,
         context_getter=gql_context,
-        graphiql=settings.GRAPHIQL_ENABLED,
+        graphql_ide="graphiql" if settings.GRAPHIQL_ENABLED else None,
     )
     app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")

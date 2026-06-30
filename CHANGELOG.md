@@ -8,6 +8,15 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- Upgrade the web/API stack: FastAPI 0.95→0.138, Starlette 0.26→1.3, Pydantic v1→v2
+  (+ `pydantic-settings`), Strawberry GraphQL 0.172→0.320, uvicorn 0.21→0.49. Code migrated to
+  pydantic v2 (`pydantic-settings.BaseSettings`, `Config`→`ConfigDict`) and to the new Strawberry
+  union (`Annotated[Union[...], strawberry.union(name)]`) and `graphql_ide` router APIs. Validated
+  end-to-end (schema build + authenticated GraphQL query) in the production base image. Supersedes
+  the parked Dependabot majors #17 (starlette) and #21 (strawberry); no data/on-disk-format or
+  GraphQL-schema changes.
+
 ### Fixed
 - Security: `FILESTORE_CREATE_UNKNOWN_*` flags were parsed with `bool(os.environ.get(..., "false"))`,
   where any non-empty string (including `"false"`) is truthy — so auto-creation of unknown
