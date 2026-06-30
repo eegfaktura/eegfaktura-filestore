@@ -17,7 +17,7 @@
 
 import os
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 def _env_bool(name: str, default: bool = False) -> bool:

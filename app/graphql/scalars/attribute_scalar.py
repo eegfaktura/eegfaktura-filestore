@@ -19,7 +19,7 @@ import uuid
 
 import strawberry
 from pydantic import Field
-from pydantic import typing
+import typing
 
 
 @strawberry.type

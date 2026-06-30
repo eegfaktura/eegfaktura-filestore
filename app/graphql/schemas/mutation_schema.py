@@ -19,7 +19,7 @@ from typing import List
 import strawberry
 import uuid
 
-from pydantic import typing
+import typing
 from strawberry.types import Info
 from strawberry.file_uploads import Upload
 
