@@ -18,6 +18,10 @@ this changelog highlights the changes relevant for overview and operations.
   GraphQL-schema changes.
 
 ### Fixed
+- File uploads (`add_file`) returned `400 Unsupported content type` after the Strawberry 0.320
+  upgrade: Strawberry disables GraphQL multipart uploads by default since ~0.236. Re-enable them
+  on the `GraphQLRouter` (`multipart_uploads_enabled=True`). Verified end-to-end with a real
+  multipart PDF upload (HTTP 200, file stored).
 - Security: `FILESTORE_CREATE_UNKNOWN_*` flags were parsed with `bool(os.environ.get(..., "false"))`,
   where any non-empty string (including `"false"`) is truthy — so auto-creation of unknown
   storage/container/category was effectively always ON and could not be disabled via `false`.
