@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.2] – 2026-06-30
+
 ### Changed
 - Upgrade the web/API stack: FastAPI 0.95→0.138, Starlette 0.26→1.3, Pydantic v1→v2
   (+ `pydantic-settings`), Strawberry GraphQL 0.172→0.320, uvicorn 0.21→0.49. Code migrated to
