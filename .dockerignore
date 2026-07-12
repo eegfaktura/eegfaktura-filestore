@@ -1,10 +1,2 @@
-# ignore Docker files
-Dockerfile
-docker-compose.yml
-# ignore db files
-postgresql
-#ignoer grpc files and folder
-app/grpc
-grpc_codegen.sh
-# ignore vfeg-filestore-data
-eegfaktura-filestore-data
+# JWT public key gehoert nicht ins Image — muss via Secret-Volume gemounted werden.
+jwt_pub_key.pem
