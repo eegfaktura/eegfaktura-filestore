@@ -19,5 +19,5 @@ from typing import Optional
 from pydantic import BaseModel
 
 class ErrorMessage(BaseModel):
-    message: Optional[str]
-    detail: Optional[str]
+    message: Optional[str] = None
+    detail: Optional[str] = None
