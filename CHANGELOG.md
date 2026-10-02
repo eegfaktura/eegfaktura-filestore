@@ -8,6 +8,20 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- The image runs as a non-root user (`app`, UID/GID 1000) on a `python:3.13-slim-bookworm` base,
+  and the JWT public key is no longer baked into the image. The data PVC therefore needs
+  `fsGroup: 1000` in the deployment — set it **before** rolling out this image, otherwise the
+  service can no longer write to its storage directory. (#28)
+- PyJWT 2.13.0 → 2.15.0 (#34) and anyio 4.14.1 → 4.14.2 (#32). The critical PyJWT advisories
+  (asymmetric key used as HMAC secret) were not reachable here — tokens are decoded with
+  `algorithms=["RS256"]` only — but the update closes them regardless.
+
+### Fixed
+- `ErrorMessage` failed to build whenever `message` or `detail` was omitted: since the Pydantic v2
+  migration (#23) optional fields need an explicit default, and both lacked one, so constructing
+  the error response itself raised a `ValidationError`. Both now default to `None`.
+
 ### Added
 - CI builds `env/**` branches and deploys the resulting image into the matching feature
   environment (ADR-0008): a push to `env/<name>` pins this service in namespace `env-<name>`
