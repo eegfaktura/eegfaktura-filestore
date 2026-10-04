@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.4] – 2026-10-04
+
 ### Security
 - The image runs as a non-root user (`app`, UID/GID 1000) on a `python:3.13-slim-bookworm` base,
   and the JWT public key is no longer baked into the image. The data PVC therefore needs
