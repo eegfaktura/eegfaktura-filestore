@@ -11,6 +11,7 @@ this changelog highlights the changes relevant for overview and operations.
 ### CI
 - `pr-checks.yml`: unit tests and the full test suite on every pull request (no tests yet (#9): unit = byte-compile and import; full = Alembic migrations against PostgreSQL and an application start; a third check reports the unpinned transitive requirements).
 - `security-scan.yml`: leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy, OSV-Scanner) and misconfigurations (Trivy). A pull request fails on what it adds; pushes to the default branch and a weekly run fail on every CRITICAL finding (HIGH is reported; `SCAN_FAIL_ON`). Scanners are fixed versions checked by SHA-256, each release at least 7 days old; actions pinned by commit SHA.
+- `security-scan.yml`: for now the vulnerable-dependency and misconfiguration findings are only reported (`SCAN_FAIL_ON: none` — the gate prints a warning in every run that it is off); leaked secrets still fail. To be tightened again once the known findings are paid down.
 
 ## [1.0.4] – 2026-10-04
 
