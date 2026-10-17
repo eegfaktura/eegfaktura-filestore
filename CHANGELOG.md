@@ -8,6 +8,14 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- **Uploads into a new storage or container work again under the non-root image.** Since 1.0.4 the
+  service runs as UID 1000 and created new directories with mode `0o660` (no x bit), so it could not
+  enter them: the first upload into every new storage/container failed with `Permission denied`
+  (production: 17 uploads between 09.10. and 16.10.2026). New directories are now created with `0o750`.
+  Directories already created with `0o660` stay broken until fixed once on the volume
+  (`find <data> -mindepth 1 -type d ! -perm -u+x -exec chmod 750 {} +`).
+
 ## [1.0.4] – 2026-10-04
 
 ### Security
