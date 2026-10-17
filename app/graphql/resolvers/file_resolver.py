@@ -19,7 +19,7 @@ import typing
 import uuid
 
 import app.dependencies
-from app.file_metadata import allowed_media_types
+from app.file_metadata import allowed_media_types, allowed_file_categories
 from fastapi import UploadFile
 from sqlalchemy import select, delete
 from sqlalchemy.orm import load_only, selectinload, contains_eager
@@ -162,18 +162,18 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
         if file.content_type not in allowed_media_types:
             return AddFileError(message="Invalid content_type")
 
+        if file_category not in allowed_file_categories:
+            return AddFileError(message="Invalid file category")
+
         async with get_session() as s:
             sql_file_category = select(file_category_model.FileCategory) \
                 .filter(file_category_model.FileCategory.name == file_category)
             db_file_category = (await s.execute(sql_file_category)).scalars().first()
 
             if db_file_category is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_CATEGORY:
-                    db_file_category = file_category_model.FileCategory(name=file_category)
-                    s.add(db_file_category)
-                    await s.flush()
-                else:
-                    return AddFileError(message="Invalid file category")
+                db_file_category = file_category_model.FileCategory(name=file_category)
+                s.add(db_file_category)
+                await s.flush()
 
             file_category_id = db_file_category.id
 
@@ -189,30 +189,25 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                 db_storage = None
 
             if db_storage is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_STORAGE:
-                    # create container
-                    db_storage = storage_model.Storage(name=f"Community {tenant} default storage", tenant=tenant)
-                    s.add(db_storage)
-                    await s.flush()
-
-                else:
-                    # Return Error if requested storage does not exist and auto-creation is disabled
-                    return AddFileError(message="No storage for community found")
+                # One storage per tenant: reuse it for a new category, create it on the first upload
+                # of this (already asserted) tenant
+                db_storage = (await s.execute(select(storage_model.Storage)
+                                              .filter(storage_model.Storage.tenant == tenant)
+                                              .order_by(storage_model.Storage.id))).scalars().first()
+            if db_storage is None:
+                db_storage = storage_model.Storage(name=f"Community {tenant} default storage", tenant=tenant)
+                s.add(db_storage)
+                await s.flush()
 
             str_storage_id = str(db_storage.id)
 
             if db_file_container is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_CONTAINER:
-                    db_file_container = file_container_model.FileContainer(
-                        name=f"Community {tenant} default {file_category} container", tenant=tenant,
-                        file_category=db_file_category,
-                        storage=db_storage)
-                    s.add(db_file_container)
-                    await s.flush()
-
-                else:
-                    # Return Error Type if requested container does not exist and auto-creation is disabled
-                    return AddFileError(message="No file Container found")
+                db_file_container = file_container_model.FileContainer(
+                    name=f"Community {tenant} default {file_category} container", tenant=tenant,
+                    file_category=db_file_category,
+                    storage=db_storage)
+                s.add(db_file_container)
+                await s.flush()
 
             str_container_id = str(db_file_container.id)
 
@@ -326,9 +321,12 @@ async def delete_file(info, id: uuid.UUID):
 
         info.context["claims"].assert_tenant(file.tenant)
 
+        # The file lives in its container's storage; a tenant may have more than one storage
         storagequery = select(storage_model.Storage) \
-            .options(load_only(storage_model.Storage.id)).\
-            filter(storage_model.Storage.tenant == file.tenant)
+            .options(load_only(storage_model.Storage.id)) \
+            .join(file_container_model.FileContainer,
+                  file_container_model.FileContainer.storage_id == storage_model.Storage.id) \
+            .filter(file_container_model.FileContainer.id == file.file_container_id)
 
         storage = (await s.execute(storagequery)).scalars().unique().first()
 

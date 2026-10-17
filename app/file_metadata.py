@@ -15,6 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+from app.rest.models.file_model import FileCategoryEnum
+
+# File categories are global (shared by all tenants), so a category name must never come
+# freely from a client. Only these may be used (same list as the REST enum); a missing row
+# for one of them is created on first use.
+allowed_file_categories = [c.value for c in FileCategoryEnum]
+
 allowed_media_types = [
     'application/pdf',
     'image/jpeg',

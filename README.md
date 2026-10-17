@@ -45,13 +45,16 @@ Environment variables (names only — never commit secret values):
 - `HTTP_PROTOCOL`, `HTTP_HOSTNAME`, `HTTP_PORT` (default `5000`),
   `HTTP_FILE_DL_ENDPOINT`, `HTTP_FILE_DL_BASE_URI`
 - `FILESTORE_LOCAL_BASE_DIR`, `FILESTORE_TEMP_DIR`
-- `FILESTORE_CREATE_UNKNOWN_CATEGORY` / `_CONTAINER` / `_STORAGE` — auto-provisioning;
-  **keep disabled in production**
 - `JWT_KEY_FILE`, `JWT_AUDIENCE`
 - `GRAPHIQL_ENABLED` — **disable in production**
 
 Exposed port: **5000**. On-disk layout:
 `{FILESTORE_LOCAL_BASE_DIR}/{storage_id}/{container_id}/{file_id}` (UUIDs only).
+
+Provisioning: the first upload of a tenant creates its storage, and the first upload of a category
+creates the tenant's container for it (after the tenant check). File categories are a fixed list
+(`allowed_file_categories` in `app/file_metadata.py`: `contract`, `invoice`); any other category is
+rejected.
 
 ## Dependencies
 
