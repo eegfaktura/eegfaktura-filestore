@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.5] – 2026-10-17
+
 ### Fixed
 - **Uploads into a new storage or container work again under the non-root image.** Since 1.0.4 the
   service runs as UID 1000 and created new directories with mode `0o660` (no x bit), so it could not
