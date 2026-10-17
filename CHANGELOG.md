@@ -8,6 +8,15 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
+  migrations against PostgreSQL and an application start (full); a report-only check that
+  requirements.txt pins every dependency.
+- CI: `security-scan.yml` on every pull request, on pushes to the default branch and weekly:
+  leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy,
+  OSV-Scanner) and misconfigurations (Trivy). For now the dependency and misconfiguration
+  findings are only reported (`SCAN_FAIL_ON: none`) and do not block; leaked secrets fail.
+
 ## [1.0.6] – 2026-10-17
 
 ### Changed
