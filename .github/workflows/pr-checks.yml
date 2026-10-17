@@ -123,8 +123,6 @@ jobs:
     name: Requirements pinned
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Report-only: transitive dependencies are not pinned yet; the result is shown, not blocking.
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -142,6 +140,14 @@ jobs:
       # Only what requirements.txt names, nothing resolved on top: pip check then lists every
       # dependency the file does not pin.
       - name: Install exactly requirements.txt
-        run: |
-          python -m pip install --no-deps -r requirements.txt
-          python -m pip check
+        run: python -m pip install --no-deps -r requirements.txt
+
+      # Report-only: transitive dependencies are not pinned yet; the result is shown, not blocking.
+      - name: pip check
+        id: check
+        continue-on-error: true
+        run: python -m pip check
+
+      - name: Report-only result
+        if: steps.check.outcome == 'failure'
+        run: echo "::warning title=Requirements pinned::report-only, not blocking - requirements.txt does not pin every dependency (see pip check)"
