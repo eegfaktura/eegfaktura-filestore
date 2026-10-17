@@ -15,6 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+# File categories are global (shared by all tenants), so a category name must never come
+# freely from a client. Only these may be used; a missing row for one of them is created
+# on first use.
+allowed_file_categories = [
+    'contract',
+    'invoice',
+]
+
 allowed_media_types = [
     'application/pdf',
     'image/jpeg',

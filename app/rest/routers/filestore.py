@@ -163,12 +163,9 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
             db_file_category = (await s.execute(sql_file_category)).scalars().first()
 
             if db_file_category is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_CATEGORY:
-                    db_file_category = file_category_model.FileCategory(name=file_category)
-                    s.add(db_file_category)
-                    await s.flush()
-                else:
-                    raise HTTPException(status_code=400, detail="Invalid file category")
+                db_file_category = file_category_model.FileCategory(name=file_category)
+                s.add(db_file_category)
+                await s.flush()
 
             file_category_id = db_file_category.id
 
@@ -184,31 +181,25 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
                 db_storage = None
 
             if db_storage is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_STORAGE:
-                    # create container
-                    db_storage = storage_model.Storage(name=f"Community {tenant} default storage",
-                                                       tenant=tenant)
-                    s.add(db_storage)
-                    await s.flush()
-
-                else:
-                    # Return Error if requested storage does not exist and auto-creation is disabled
-                    raise HTTPException(status_code=400, detail="No storage for community found")
+                # One storage per tenant: reuse it for a new category, create it on the first upload
+                # of this (already asserted) tenant
+                db_storage = (await s.execute(select(storage_model.Storage)
+                                              .filter(storage_model.Storage.tenant == tenant))).scalars().first()
+            if db_storage is None:
+                db_storage = storage_model.Storage(name=f"Community {tenant} default storage",
+                                                   tenant=tenant)
+                s.add(db_storage)
+                await s.flush()
 
             str_storage_id = str(db_storage.id)
 
             if db_file_container is None:
-                if settings.FILESTORE_CREATE_UNKNOWN_CONTAINER:
-                    db_file_container = file_container_model.FileContainer(
-                        name=f"Community {tenant} default {file_category} container", tenant=tenant,
-                        file_category=db_file_category,
-                        storage=db_storage)
-                    s.add(db_file_container)
-                    await s.flush()
-
-                else:
-                    # Return Error Type if requested container does not exist and auto-creation is disabled
-                    raise HTTPException(status_code=400, detail="No file Container found")
+                db_file_container = file_container_model.FileContainer(
+                    name=f"Community {tenant} default {file_category} container", tenant=tenant,
+                    file_category=db_file_category,
+                    storage=db_storage)
+                s.add(db_file_container)
+                await s.flush()
 
             str_container_id = str(db_file_container.id)
 

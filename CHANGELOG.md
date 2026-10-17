@@ -8,6 +8,26 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- **File categories are a fixed list** (`contract`, `invoice`). A GraphQL upload with any other
+  category is rejected ("Invalid file category"); before, it created a new global category when
+  `FILESTORE_CREATE_UNKNOWN_CATEGORY` was on (it was on in production). The REST upload was already
+  limited to these two.
+- **Storage and container of a tenant are created on its first upload without a switch.** The
+  tenant is asserted first, so only the caller's own storage can be created. This is what production
+  already did with the flags on; with the flags off, the first upload of a new community failed.
+
+### Fixed
+- **The first upload of a new category no longer creates a second storage for the tenant.** The
+  storage was only looked up through an existing container of the same category, so e.g. a first
+  invoice next to existing contracts created another storage. Deleting a file looks the storage up
+  by tenant and could then build the path from the wrong storage. Now the tenant's existing storage
+  is reused.
+
+### Removed
+- Environment variables `FILESTORE_CREATE_UNKNOWN_CATEGORY`, `_CONTAINER` and `_STORAGE`. They are
+  ignored if still set; remove them from deployments.
+
 ## [1.0.5] – 2026-10-17
 
 ### Fixed
