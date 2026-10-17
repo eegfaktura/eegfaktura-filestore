@@ -192,7 +192,8 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                 # One storage per tenant: reuse it for a new category, create it on the first upload
                 # of this (already asserted) tenant
                 db_storage = (await s.execute(select(storage_model.Storage)
-                                              .filter(storage_model.Storage.tenant == tenant))).scalars().first()
+                                              .filter(storage_model.Storage.tenant == tenant)
+                                              .order_by(storage_model.Storage.id))).scalars().first()
             if db_storage is None:
                 db_storage = storage_model.Storage(name=f"Community {tenant} default storage", tenant=tenant)
                 s.add(db_storage)
@@ -320,9 +321,12 @@ async def delete_file(info, id: uuid.UUID):
 
         info.context["claims"].assert_tenant(file.tenant)
 
+        # The file lives in its container's storage; a tenant may have more than one storage
         storagequery = select(storage_model.Storage) \
-            .options(load_only(storage_model.Storage.id)).\
-            filter(storage_model.Storage.tenant == file.tenant)
+            .options(load_only(storage_model.Storage.id)) \
+            .join(file_container_model.FileContainer,
+                  file_container_model.FileContainer.storage_id == storage_model.Storage.id) \
+            .filter(file_container_model.FileContainer.id == file.file_container_id)
 
         storage = (await s.execute(storagequery)).scalars().unique().first()
 

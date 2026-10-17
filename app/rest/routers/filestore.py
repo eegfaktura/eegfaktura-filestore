@@ -148,6 +148,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
     """ Add file """
     claims.assert_tenant(tenant)
     tenant = base_tenant(tenant)
+    file_category = file_category.value
 
     # TODO name determination
     try:
@@ -184,7 +185,8 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
                 # One storage per tenant: reuse it for a new category, create it on the first upload
                 # of this (already asserted) tenant
                 db_storage = (await s.execute(select(storage_model.Storage)
-                                              .filter(storage_model.Storage.tenant == tenant))).scalars().first()
+                                              .filter(storage_model.Storage.tenant == tenant)
+                                              .order_by(storage_model.Storage.id))).scalars().first()
             if db_storage is None:
                 db_storage = storage_model.Storage(name=f"Community {tenant} default storage",
                                                    tenant=tenant)
@@ -235,7 +237,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
         file_dict["file_download_uri"] = get_file_download_uri(file_dict["id"])
 
         del file_dict["file_container_id"]
-        del file_dict["community_id"]
+        del file_dict["tenant"]
 
         return FileUploadResponse(**file_dict)
 

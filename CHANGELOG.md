@@ -14,15 +14,22 @@ this changelog highlights the changes relevant for overview and operations.
   `FILESTORE_CREATE_UNKNOWN_CATEGORY` was on (it was on in production). The REST upload was already
   limited to these two.
 - **Storage and container of a tenant are created on its first upload without a switch.** The
-  tenant is asserted first, so only the caller's own storage can be created. This is what production
-  already did with the flags on; with the flags off, the first upload of a new community failed.
+  tenant is asserted first, so a member token can only create its own community's storage (a
+  superuser passes the check for any tenant, as before). This is what production already did with
+  the flags on; with the flags off, the first upload of a new community failed.
 
 ### Fixed
 - **The first upload of a new category no longer creates a second storage for the tenant.** The
   storage was only looked up through an existing container of the same category, so e.g. a first
-  invoice next to existing contracts created another storage. Deleting a file looks the storage up
-  by tenant and could then build the path from the wrong storage. Now the tenant's existing storage
-  is reused.
+  invoice next to existing contracts created another storage. Now the tenant's storage is reused
+  (lowest id, so the choice is stable also for tenants that already have several).
+- **Deleting a file uses the storage of the file's container.** It looked the storage up by tenant
+  only; for a tenant with several storages it could build a wrong path, delete the DB row and leave
+  the file on disk.
+- **REST upload (`POST /filestore/upload/…`) no longer answers 500 after storing the file.** It
+  removed a key `community_id` that no longer exists since the tenant rename; a client retrying on
+  5xx stored the document again. Containers created via REST no longer carry the enum class name in
+  their name.
 
 ### Removed
 - Environment variables `FILESTORE_CREATE_UNKNOWN_CATEGORY`, `_CONTAINER` and `_STORAGE`. They are
