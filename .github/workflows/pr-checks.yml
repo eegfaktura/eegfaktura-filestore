@@ -8,6 +8,8 @@
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
 # (2026-09-30), postgres 15.19-alpine (2026-09-21, the major of the production database).
 # Actions pinned by commit SHA.
+# Every job keeps its output as an artifact for 30 days (test-results-<job>, known-errors-<job>),
+# for the CI report collector (vfeeg-development/eegfaktura-dev).
 
 name: PR Checks
 
@@ -50,8 +52,21 @@ jobs:
 
       - name: Byte-compile and import
         run: |
-          python -m compileall -q app main.py alembic
-          python -c "import main; print('application:', type(main.application).__name__)"
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          {
+            python -m compileall -q app main.py alembic
+            python -c "import main; print('application:', type(main.application).__name__)"
+          } 2>&1 | tee "$RUNNER_TEMP/results/unit.log"
+
+      - name: Keep the test log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-unit
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
 
   full:
     name: Full test suite
@@ -99,16 +114,20 @@ jobs:
       # their tables and the version table into it but do not create it).
       - name: Migrations (alembic upgrade head)
         run: |
-          PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOSTNAME" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" \
-            -c 'CREATE SCHEMA IF NOT EXISTS filestore'
-          alembic upgrade head
-          alembic current
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          {
+            PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOSTNAME" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_DATABASE" \
+              -c 'CREATE SCHEMA IF NOT EXISTS filestore'
+            alembic upgrade head
+            alembic current
+          } 2>&1 | tee "$RUNNER_TEMP/results/migrations.log"
 
       - name: Application starts
         run: |
           set -euo pipefail
           mkdir -p "$FILESTORE_LOCAL_BASE_DIR/tmp"
-          python main.py > "$RUNNER_TEMP/filestore.log" 2>&1 &
+          python main.py > "$RUNNER_TEMP/results/filestore.log" 2>&1 &
           pid=$!
           for i in $(seq 1 30); do
             if curl -fs "http://localhost:${HTTP_PORT}/openapi.json" > /dev/null; then
@@ -117,7 +136,16 @@ jobs:
             sleep 1
           done
           echo "::error::the application did not answer within 30 s"
-          cat "$RUNNER_TEMP/filestore.log"; kill "$pid" || true; exit 1
+          cat "$RUNNER_TEMP/results/filestore.log"; kill "$pid" || true; exit 1
+
+      - name: Keep the test logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-full
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
 
   requirements:
     name: Requirements pinned
@@ -146,8 +174,20 @@ jobs:
       - name: pip check
         id: check
         continue-on-error: true
-        run: python -m pip check
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          python -m pip check 2>&1 | tee "$RUNNER_TEMP/results/pip-check.log"
 
       - name: Report-only result
         if: steps.check.outcome == 'failure'
         run: echo "::warning title=Requirements pinned::report-only, not blocking - requirements.txt does not pin every dependency (see pip check)"
+
+      - name: Keep the check output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: known-errors-requirements
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30

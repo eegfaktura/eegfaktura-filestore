@@ -16,6 +16,9 @@ this changelog highlights the changes relevant for overview and operations.
   leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy,
   OSV-Scanner) and misconfigurations (Trivy). For now the dependency and misconfiguration
   findings are only reported (`SCAN_FAIL_ON: none`) and do not block; leaked secrets fail.
+- CI: every run keeps its scan and test results as artifacts for 30 days (`scan-*`,
+  `test-results-<job>`, `known-errors-<job>`) for a CI report collector; the secret scan keeps
+  outcomes and counts only.
 
 ## [1.0.6] – 2026-10-17
 
