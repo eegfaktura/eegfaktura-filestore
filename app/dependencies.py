@@ -188,7 +188,9 @@ def move_file(file_source_name: str, file_target_name: str, overwrite: bool = Tr
 
     if not os.path.isdir(target_path):
         #TODO Logging
-        os.makedirs(target_path, 0o660)
+        # 0o750: the service runs as non-root since 1.0.4 and must be able to enter the directories it
+        # creates (0o660 has no x bit: the move into a new storage/container failed with EACCES)
+        os.makedirs(target_path, 0o750)
 
     shutil.move(file_source_name, file_target_name)
 
@@ -196,7 +198,7 @@ def move_file(file_source_name: str, file_target_name: str, overwrite: bool = Tr
 def check_tmp_dir():
     if not os.path.isdir(settings.FILESTORE_TEMP_DIR):
         # TODO Log file creation
-        os.mkdir(settings.FILESTORE_TEMP_DIR, mode=0o660)
+        os.mkdir(settings.FILESTORE_TEMP_DIR, mode=0o750)
 
 def get_absolute_url(url: str, request: Request):
     # test if is absolute URL
