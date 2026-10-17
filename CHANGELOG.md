@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.6] – 2026-10-17
+
 ### Changed
 - **File categories are a fixed list** (`contract`, `invoice`). A GraphQL upload with any other
   category is rejected ("Invalid file category"); before, it created a new global category when
