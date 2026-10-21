@@ -5,7 +5,7 @@
 #          between the models and the migrated schema, and the application starts and serves its
 #          OpenAPI document.
 # "Requirements pinned" checks that requirements.txt pins every dependency, the transitive ones
-# included; it is report-only for now. The test jobs install as the Dockerfile does.
+# included. The test jobs install as the Dockerfile does.
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
 # (2026-09-30), postgres 15.19-alpine (2026-09-21, the major of the production database).
 # Actions pinned by commit SHA.
@@ -173,24 +173,17 @@ jobs:
       - name: Install exactly requirements.txt
         run: python -m pip install --no-deps -r requirements.txt
 
-      # Report-only: transitive dependencies are not pinned yet; the result is shown, not blocking.
       - name: pip check
-        id: check
-        continue-on-error: true
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
           python -m pip check 2>&1 | tee "$RUNNER_TEMP/results/pip-check.log"
 
-      - name: Report-only result
-        if: steps.check.outcome == 'failure'
-        run: echo "::warning title=Requirements pinned::report-only, not blocking - requirements.txt does not pin every dependency (see pip check)"
-
       - name: Keep the check output
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: known-errors-requirements
+          name: test-results-requirements
           path: ${{ runner.temp }}/results
           if-no-files-found: ignore
           retention-days: 30

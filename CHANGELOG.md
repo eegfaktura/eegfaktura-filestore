@@ -19,6 +19,9 @@ this changelog highlights the changes relevant for overview and operations.
   password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
   the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
   until now pulled in as a recommendation of `gcc`, is named explicitly. (platform#185)
+- `requirements.txt` pins the transitive dependencies too, at the versions the image installed so
+  far (the installed set is unchanged). The CI check "Requirements pinned" now blocks; its output
+  artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
 
 ### Added
 - CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)

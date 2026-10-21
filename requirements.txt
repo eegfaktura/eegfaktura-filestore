@@ -19,3 +19,20 @@ alembic==1.18.5
 psycopg2==2.9.12
 pyyaml==6.0.3
 pyjwt[crypto]==2.15.0
+# Transitive dependencies, pinned to what the image resolved on 2026-10-21 (CI "Requirements
+# pinned" fails when requirements.txt misses one).
+annotated-doc==0.0.5
+annotated-types==0.8.0
+cffi==2.1.1
+click==8.5.0
+cross-web==0.7.0
+cryptography==50.0.2
+greenlet==3.5.6
+h11==0.16.0
+Mako==1.4.3
+MarkupSafe==3.0.4
+packaging==26.3
+pycparser==3.11
+pydantic_core==2.46.4
+python-dotenv==1.2.4
+typing-inspection==0.4.4
