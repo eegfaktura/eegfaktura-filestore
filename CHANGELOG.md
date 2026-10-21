@@ -15,6 +15,11 @@ this changelog highlights the changes relevant for overview and operations.
   (platform#185)
 
 ### Changed
+- CI full job and the local `docker-compose.yml` database: PostgreSQL 18.6 (`postgres:18.6-alpine`,
+  pinned by digest) instead of 15.19 / `15-alpine`, the major all zones run; the workflow comment
+  no longer calls 15 the production major. The compose volume is now mounted at
+  `/var/lib/postgresql` (as the 18 image requires); a local volume with 15 data is not upgraded,
+  recreate it (`docker compose down -v`). (platform#185)
 - Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
   password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
   the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
