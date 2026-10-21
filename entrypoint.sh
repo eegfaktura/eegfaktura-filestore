@@ -24,7 +24,8 @@ if [ "$DB_PASSWORD" == "" ]; then
   if [ "$DB_PASSWORD_FILE" != "" ]; then
     #check if file exists
     if [ -e "$DB_PASSWORD_FILE" ]; then
-      DB_PASSWORD=`cat "$DB_PASSWORD_FILE"`
+      # export: the image no longer sets DB_PASSWORD, so a plain assignment would not reach alembic/python
+      export DB_PASSWORD=`cat "$DB_PASSWORD_FILE"`
     fi
   fi
 fi

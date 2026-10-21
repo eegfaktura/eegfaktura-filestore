@@ -14,6 +14,12 @@ this changelog highlights the changes relevant for overview and operations.
   (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
   (platform#185)
 
+### Changed
+- Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
+  password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
+  the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
+  until now pulled in as a recommendation of `gcc`, is named explicitly. (platform#185)
+
 ### Added
 - CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
