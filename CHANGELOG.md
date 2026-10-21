@@ -8,7 +8,14 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- `alembic check` no longer reports four foreign keys as changed. The online migration environment
+  now compares only the `filestore` schema, with the version table named as in the offline one
+  (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
+  (platform#185)
+
 ### Added
+- CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
   migrations against PostgreSQL and an application start (full); a report-only check that
   requirements.txt pins every dependency.

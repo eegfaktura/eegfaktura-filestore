@@ -1,8 +1,9 @@
 # Checks on every pull request. The repository has no tests yet, so the two test jobs check what
 # can be checked without them:
 #   unit — every module byte-compiles and the application imports;
-#   full — the Alembic migrations run against a real PostgreSQL and the application starts and
-#          serves its OpenAPI document.
+#   full — the Alembic migrations run against a real PostgreSQL, `alembic check` finds no difference
+#          between the models and the migrated schema, and the application starts and serves its
+#          OpenAPI document.
 # "Requirements pinned" checks that requirements.txt pins every dependency, the transitive ones
 # included; it is report-only for now. The test jobs install as the Dockerfile does.
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
@@ -112,7 +113,8 @@ jobs:
 
       # The production database has the schema before the service starts (the migrations put
       # their tables and the version table into it but do not create it).
-      - name: Migrations (alembic upgrade head)
+      # alembic check: the models match the schema the migrations build (no pending autogenerate change).
+      - name: Migrations (alembic upgrade head, alembic check)
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
@@ -121,6 +123,7 @@ jobs:
               -c 'CREATE SCHEMA IF NOT EXISTS filestore'
             alembic upgrade head
             alembic current
+            alembic check
           } 2>&1 | tee "$RUNNER_TEMP/results/migrations.log"
 
       - name: Application starts
