@@ -7,7 +7,7 @@
 # "Requirements pinned" checks that requirements.txt pins every dependency, the transitive ones
 # included. The test jobs install as the Dockerfile does.
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
-# (2026-09-30), postgres 18.6-alpine (2026-09-21, checked 2026-10-21; the major all zones run);
+# (2026-09-30), postgres 18.6-alpine (2026-09-17, checked 2026-10-21; the major all zones run);
 # ruff 0.17.0 (2026-10-09, checked 2026-10-21; test dependencies in requirements-test.txt likewise).
 # Actions pinned by commit SHA.
 # Every job keeps its output as an artifact for 30 days (test-results-<job>),
