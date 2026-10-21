@@ -165,6 +165,12 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
         if file_category not in allowed_file_categories:
             return AddFileError(message="Invalid file category")
 
+        # Do not allow to override default attributes; checked before anything is written (the
+        # upload would otherwise leave its temporary file behind)
+        for attribute in attributes or []:
+            if attribute.key in (['orig_file_name', 'file_extension', 'media_type', 'file_bytes']):
+                return AddFileError(message=f"Forbidden Attribute \"{attribute.key}\"")
+
         async with get_session() as s:
             sql_file_category = select(file_category_model.FileCategory) \
                 .filter(file_category_model.FileCategory.name == file_category)
@@ -228,15 +234,11 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                                                      value=os.path.splitext(file.filename)[1][1:]))
             s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
 
-            # Add extra attributes if set
+            # Add extra attributes if set (the forbidden keys are rejected above)
             if attributes is not None:
                 for attribute in attributes:
-                    # Do not allow to override default attributes
-                    if attribute.key not in (['orig_file_name', 'file_extension', 'media_type', 'file_bytes']):
-                        s.add(
-                            file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
-                    else:
-                        return AddFileError(message=f"Forbidden Attribute \"{attribute.key}\"")
+                    s.add(
+                        file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
 
             targetfile = f"{settings.FILESTORE_LOCAL_BASE_DIR}/{str_storage_id}/{str_container_id}/{str(db_file.id)}"
             move_file(tmpfilename, targetfile)
