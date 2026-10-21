@@ -25,6 +25,12 @@ this changelog highlights the changes relevant for overview and operations.
 
 ### Added
 - CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
+- Tests (`tests/`, pytest with FastAPI's TestClient against the migrated PostgreSQL, run by the CI
+  full job): requests without or with an invalid token (no `exp`, expired, HS256) get 401; a token
+  of another tenant cannot upload, download or list (403); only the categories `contract` and
+  `invoice` are accepted (REST and GraphQL); upload and download for the own tenant. Test
+  dependencies are pinned in `requirements-test.txt`; the tests generate their own RSA keypair.
+  (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
   migrations against PostgreSQL and an application start (full); a report-only check that
   requirements.txt pins every dependency.

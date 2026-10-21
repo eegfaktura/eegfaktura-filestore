@@ -1,9 +1,8 @@
-# Checks on every pull request. The repository has no tests yet, so the two test jobs check what
-# can be checked without them:
+# Checks on every pull request:
 #   unit — every module byte-compiles and the application imports;
 #   full — the Alembic migrations run against a real PostgreSQL, `alembic check` finds no difference
-#          between the models and the migrated schema, and the application starts and serves its
-#          OpenAPI document.
+#          between the models and the migrated schema, the tests (tests/, pytest) pass against that
+#          database, and the application starts and serves its OpenAPI document.
 # "Requirements pinned" checks that requirements.txt pins every dependency, the transitive ones
 # included. The test jobs install as the Dockerfile does.
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
@@ -109,7 +108,7 @@ jobs:
         run: command -v pg_config || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libpq-dev; }
 
       - name: Install the requirements
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
 
       # The production database has the schema before the service starts (the migrations put
       # their tables and the version table into it but do not create it).
@@ -125,6 +124,11 @@ jobs:
             alembic current
             alembic check
           } 2>&1 | tee "$RUNNER_TEMP/results/migrations.log"
+
+      # tests/ against the migrated database: token required, tenant isolation, file categories,
+      # upload/download for the own tenant. The tests generate their own RSA keypair.
+      - name: Tests (pytest)
+        run: python -m pytest -p no:cacheprovider --junitxml "$RUNNER_TEMP/results/pytest.xml" tests
 
       - name: Application starts
         run: |
