@@ -19,6 +19,11 @@ this changelog highlights the changes relevant for overview and operations.
   (platform#185)
 
 ### Changed
+- CI full job and the local `docker-compose.yml` database: PostgreSQL 18.6 (`postgres:18.6-alpine`,
+  pinned by digest) instead of 15.19 / `15-alpine`, the major all zones run; the workflow comment
+  no longer calls 15 the production major. The compose volume is now mounted at
+  `/var/lib/postgresql` (as the 18 image requires); a local volume with 15 data is not upgraded,
+  recreate it (`docker compose down -v`; the database container does not start on the old volume, and `down -v` deletes its data — dump it first if needed). (platform#185)
 - Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
   password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
   the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
@@ -28,6 +33,13 @@ this changelog highlights the changes relevant for overview and operations.
   artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
 
 ### Added
+- Tests: a token with a wrong `aud` gets 401; a token with the realm role `superuser` reaches another
+  tenant's files (download, list, upload); GEA sub-community tenants (`GCxxxxxx-00n`) and their stem
+  (`GCxxxxxx`) reach the same files in both directions, another stem gets 403. (platform#185)
+- Test: an HS256 token signed with the RS256 public key as HMAC secret (algorithm confusion) gets
+  401. The test switches off PyJWT's own refusal of PEM keys as HMAC secrets, so it fails as soon as
+  `get_claims` accepts HS256; the former HS256 test used an unrelated secret and would have passed
+  either way. (platform#185)
 - CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
 - Tests (`tests/`, pytest with FastAPI's TestClient against the migrated PostgreSQL, run by the CI
   full job): requests without or with an invalid token (no `exp`, expired, HS256) get 401; a token
