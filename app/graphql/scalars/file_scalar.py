@@ -23,7 +23,7 @@ from pydantic import Field
 import typing
 from strawberry.file_uploads import Upload
 
-from app.graphql.scalars.attribute_scalar import Attribute, AttributeInput
+from app.graphql.scalars.attribute_scalar import Attribute
 
 
 @strawberry.type

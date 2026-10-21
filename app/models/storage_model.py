@@ -22,8 +22,7 @@ from typing import Any
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.sql import func, text
-from sqlalchemy.sql.functions import func
+from sqlalchemy.sql import text
 
 from . import Base
 

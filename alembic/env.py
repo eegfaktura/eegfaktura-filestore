@@ -21,7 +21,6 @@ if config.config_file_name is not None:
 
 
 from app.models import Base
-from app.models import File, FileCategory, FileAttribute, FileContainer, Storage
 from app.config import settings
 
 target_metadata = Base.metadata
@@ -63,6 +62,14 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def include_name(name, type_, parent_names) -> bool:
+    # Compare only the filestore schema: the SET search_path below makes the unqualified schema point
+    # at filestore too, comparing it as well would report every table twice.
+    if type_ == "schema":
+        return name == "filestore"
+    return True
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -74,17 +81,23 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # Fixes the default schema SQLAlchemy reads on connect to public, whatever the database user is
+        # called (a user named "filestore" would otherwise make filestore the default schema). Then
+        # autogenerate/check reflect the filestore tables with their schema, as the models declare them.
+        connect_args={"options": "-c search_path=public"},
     )
 
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata
-
+            target_metadata=target_metadata,
+            version_table_schema='filestore',
+            include_schemas=True,
+            include_name=include_name,
         )
 
         with context.begin_transaction():
-            context.execute(f"SET search_path TO filestore, public")
+            context.execute("SET search_path TO filestore, public")
             context.run_migrations()
 
 

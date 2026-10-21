@@ -17,16 +17,12 @@
 
 import uuid
 
-from sqlalchemy import Column
-from sqlalchemy import String
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
-from sqlalchemy.sql import func, text
 
-from sqlalchemy.dialects.postgresql import UUID
 
 
 from . import Base

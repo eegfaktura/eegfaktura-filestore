@@ -28,7 +28,7 @@ from app.auth import base_tenant
 from app.config import settings
 
 from app.db.session import get_session
-from app.dependencies import get_valid_data, get_file_download_uri, upload_file, move_file, get_absolute_url
+from app.dependencies import get_valid_data, upload_file, move_file, get_absolute_url
 from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, AddFile, AddFileError, DeleteFile, DeleteFileError

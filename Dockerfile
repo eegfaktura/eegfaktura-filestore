@@ -31,7 +31,7 @@ LABEL version="0.1.0"
 WORKDIR /vfeeg-filestore
 
 COPY requirements.txt requirements.txt
-RUN apt-get update && apt-get -y upgrade && apt-get -y install libpq-dev gcc
+RUN apt-get update && apt-get -y upgrade && apt-get -y install --no-install-recommends libpq-dev gcc libc6-dev
 RUN pip3 install --no-cache-dir --upgrade pip && pip3 install --no-cache-dir --upgrade -r requirements.txt
 COPY . .
 
@@ -46,7 +46,6 @@ USER app
 ENV APP_LOG_LEVEL="debug"
 ENV DB_HOSTNAME="postgres"
 ENV DB_USERNAME="postgres"
-ENV DB_PASSWORD=""
 ENV DB_DATABASE="eegfaktura"
 ENV DB_PORT=5432
 ENV HTTP_PROTOCOL="http"

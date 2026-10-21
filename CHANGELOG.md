@@ -8,10 +8,36 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- `alembic check` no longer reports four foreign keys as changed. The online migration environment
+  now compares only the `filestore` schema, with the version table named as in the offline one
+  (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
+  (platform#185)
+
+### Changed
+- Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
+  password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
+  the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
+  until now pulled in as a recommendation of `gcc`, is named explicitly. (platform#185)
+- `requirements.txt` pins the transitive dependencies too, at the versions the image installed so
+  far (the installed set is unchanged). The CI check "Requirements pinned" now blocks; its output
+  artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
+
 ### Added
+- CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
+- Tests (`tests/`, pytest with FastAPI's TestClient against the migrated PostgreSQL, run by the CI
+  full job): requests without or with an invalid token (no `exp`, expired, HS256) get 401; a token
+  of another tenant cannot upload, download or list (403); only the categories `contract` and
+  `invoice` are accepted (REST and GraphQL); upload and download for the own tenant. Test
+  dependencies are pinned in `requirements-test.txt`; the tests generate their own RSA keypair.
+  (platform#185)
+- CI: job "Lint" runs ruff with bug-finding rules only (`F`, `E7`, `B`; `ruff.toml`) and blocks.
+  Its findings are fixed: unused and duplicate imports removed, a stray expression statement
+  (`0`) removed, bare `except` → `except Exception`, `caching == True` → `caching`, and the two
+  re-raised `HTTPException`s chain their cause (`from e`). No behaviour change. (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
-  migrations against PostgreSQL and an application start (full); a report-only check that
-  requirements.txt pins every dependency.
+  migrations against PostgreSQL and an application start (full); a check that requirements.txt pins
+  every dependency (report-only at first, now blocking, see below).
 - CI: `security-scan.yml` on every pull request, on pushes to the default branch and weekly:
   leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy,
   OSV-Scanner) and misconfigurations (Trivy). For now the dependency and misconfiguration

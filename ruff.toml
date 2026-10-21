@@ -1,0 +1,14 @@
+# ruff (CI "Lint"): only rules that point at real bugs - pyflakes (F), statement errors (E7) and
+# bugbear (B). Style and formatting rules stay off on purpose.
+[lint]
+select = ["F", "E7", "B"]
+
+[lint.flake8-bugbear]
+# FastAPI dependencies are declared as argument defaults by design
+extend-immutable-calls = ["fastapi.Depends"]
+
+[lint.per-file-ignores]
+# re-exports of the models
+"app/models/__init__.py" = ["F401"]
+# relationship targets are given as strings and resolved by the SQLAlchemy registry
+"app/models/*.py" = ["F821"]

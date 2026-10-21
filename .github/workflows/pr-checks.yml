@@ -1,14 +1,16 @@
-# Checks on every pull request. The repository has no tests yet, so the two test jobs check what
-# can be checked without them:
+# Checks on every pull request:
 #   unit — every module byte-compiles and the application imports;
-#   full — the Alembic migrations run against a real PostgreSQL and the application starts and
-#          serves its OpenAPI document.
+#   full — the Alembic migrations run against a real PostgreSQL, `alembic check` finds no difference
+#          between the models and the migrated schema, the tests (tests/, pytest) pass against that
+#          database, and the application starts and serves its OpenAPI document.
+# "Lint" runs ruff with the rules in ruff.toml (real bugs only, no style rules).
 # "Requirements pinned" checks that requirements.txt pins every dependency, the transitive ones
-# included; it is report-only for now. The test jobs install as the Dockerfile does.
+# included. The test jobs install as the Dockerfile does.
 # Versions fixed, each release older than 7 days (checked 2026-10-09): Python 3.13.16
-# (2026-09-30), postgres 15.19-alpine (2026-09-21, the major of the production database).
+# (2026-09-30), postgres 15.19-alpine (2026-09-21, the major of the production database); ruff
+# 0.17.0 (2026-10-09, checked 2026-10-21; test dependencies in requirements-test.txt likewise).
 # Actions pinned by commit SHA.
-# Every job keeps its output as an artifact for 30 days (test-results-<job>, known-errors-<job>),
+# Every job keeps its output as an artifact for 30 days (test-results-<job>),
 # for the CI report collector (vfeeg-development/eegfaktura-dev).
 
 name: PR Checks
@@ -26,6 +28,7 @@ concurrency:
 
 env:
   PYTHON_VERSION: '3.13.16'
+  RUFF_VERSION: '0.17.0'
 
 jobs:
   unit:
@@ -108,11 +111,12 @@ jobs:
         run: command -v pg_config || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libpq-dev; }
 
       - name: Install the requirements
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
 
       # The production database has the schema before the service starts (the migrations put
       # their tables and the version table into it but do not create it).
-      - name: Migrations (alembic upgrade head)
+      # alembic check: the models match the schema the migrations build (no pending autogenerate change).
+      - name: Migrations (alembic upgrade head, alembic check)
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
@@ -121,7 +125,13 @@ jobs:
               -c 'CREATE SCHEMA IF NOT EXISTS filestore'
             alembic upgrade head
             alembic current
+            alembic check
           } 2>&1 | tee "$RUNNER_TEMP/results/migrations.log"
+
+      # tests/ against the migrated database: token required, tenant isolation, file categories,
+      # upload/download for the own tenant. The tests generate their own RSA keypair.
+      - name: Tests (pytest)
+        run: python -m pytest -p no:cacheprovider --junitxml "$RUNNER_TEMP/results/pytest.xml" tests
 
       - name: Application starts
         run: |
@@ -143,6 +153,39 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-results-full
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: python -m pip install "ruff==${RUFF_VERSION}"
+
+      - name: ruff check
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/results"
+          ruff check --no-cache --output-format github . 2>&1 | tee "$RUNNER_TEMP/results/ruff.log"
+
+      - name: Keep the lint output
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-results-lint
           path: ${{ runner.temp }}/results
           if-no-files-found: ignore
           retention-days: 30
@@ -170,24 +213,17 @@ jobs:
       - name: Install exactly requirements.txt
         run: python -m pip install --no-deps -r requirements.txt
 
-      # Report-only: transitive dependencies are not pinned yet; the result is shown, not blocking.
       - name: pip check
-        id: check
-        continue-on-error: true
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/results"
           python -m pip check 2>&1 | tee "$RUNNER_TEMP/results/pip-check.log"
 
-      - name: Report-only result
-        if: steps.check.outcome == 'failure'
-        run: echo "::warning title=Requirements pinned::report-only, not blocking - requirements.txt does not pin every dependency (see pip check)"
-
       - name: Keep the check output
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: known-errors-requirements
+          name: test-results-requirements
           path: ${{ runner.temp }}/results
           if-no-files-found: ignore
           retention-days: 30
