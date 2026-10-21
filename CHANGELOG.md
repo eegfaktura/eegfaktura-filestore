@@ -8,29 +8,7 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
-### Fixed
-- GraphQL `addFile` with a default attribute key (`orig_file_name`, `file_extension`, `media_type`,
-  `file_bytes`) in `attributes` is rejected before anything is written: no temporary file is left
-  in `FILESTORE_TEMP_DIR` any more. The client gets the same error ("Forbidden Attribute"); the
-  file row was already rolled back before. (platform#185)
-- `alembic check` no longer reports four foreign keys as changed. The online migration environment
-  now compares only the `filestore` schema, with the version table named as in the offline one
-  (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
-  (platform#185)
-
-### Changed
-- CI full job and the local `docker-compose.yml` database: PostgreSQL 18.6 (`postgres:18.6-alpine`,
-  pinned by digest) instead of 15.19 / `15-alpine`, the major all zones run; the workflow comment
-  no longer calls 15 the production major. The compose volume is now mounted at
-  `/var/lib/postgresql` (as the 18 image requires); a local volume with 15 data is not upgraded,
-  recreate it (`docker compose down -v`; the database container does not start on the old volume, and `down -v` deletes its data — dump it first if needed). (platform#185)
-- Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
-  password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
-  the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
-  until now pulled in as a recommendation of `gcc`, is named explicitly. (platform#185)
-- `requirements.txt` pins the transitive dependencies too, at the versions the image installed so
-  far (the installed set is unchanged). The CI check "Requirements pinned" now blocks; its output
-  artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
+## [1.0.7] – 2026-10-21
 
 ### Added
 - Tests: a token with a wrong `aud` gets 401; a token with the realm role `superuser` reaches another
@@ -61,6 +39,30 @@ this changelog highlights the changes relevant for overview and operations.
 - CI: every run keeps its scan and test results as artifacts for 30 days (`scan-*`,
   `test-results-<job>`, `known-errors-<job>`) for a CI report collector; the secret scan keeps
   outcomes and counts only.
+
+### Changed
+- CI full job and the local `docker-compose.yml` database: PostgreSQL 18.6 (`postgres:18.6-alpine`,
+  pinned by digest) instead of 15.19 / `15-alpine`, the major all zones run; the workflow comment
+  no longer calls 15 the production major. The compose volume is now mounted at
+  `/var/lib/postgresql` (as the 18 image requires); a local volume with 15 data is not upgraded,
+  recreate it (`docker compose down -v`; the database container does not start on the old volume, and `down -v` deletes its data — dump it first if needed). (platform#185)
+- Image: no empty `DB_PASSWORD` default in the image environment any more (Trivy DS-0031); the
+  password still comes from `DB_PASSWORD` (as in the gitops manifests) or `DB_PASSWORD_FILE`, which
+  the entrypoint now exports. apt installs without recommended packages (DS-0029); `libc6-dev`,
+  until now pulled in as a recommendation of `gcc`, is named explicitly. (platform#185)
+- `requirements.txt` pins the transitive dependencies too, at the versions the image installed so
+  far (the installed set is unchanged). The CI check "Requirements pinned" now blocks; its output
+  artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
+
+### Fixed
+- GraphQL `addFile` with a default attribute key (`orig_file_name`, `file_extension`, `media_type`,
+  `file_bytes`) in `attributes` is rejected before anything is written: no temporary file is left
+  in `FILESTORE_TEMP_DIR` any more. The client gets the same error ("Forbidden Attribute"); the
+  file row was already rolled back before. (platform#185)
+- `alembic check` no longer reports four foreign keys as changed. The online migration environment
+  now compares only the `filestore` schema, with the version table named as in the offline one
+  (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
+  (platform#185)
 
 ## [1.0.6] – 2026-10-17
 
