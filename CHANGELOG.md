@@ -9,6 +9,10 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Fixed
+- GraphQL `addFile` with a default attribute key (`orig_file_name`, `file_extension`, `media_type`,
+  `file_bytes`) in `attributes` is rejected before anything is written: no temporary file is left
+  in `FILESTORE_TEMP_DIR` any more. The client gets the same error ("Forbidden Attribute"); the
+  file row was already rolled back before. (platform#185)
 - `alembic check` no longer reports four foreign keys as changed. The online migration environment
   now compares only the `filestore` schema, with the version table named as in the offline one
   (`filestore.alembic_version`, where it already was); the migrations themselves are unchanged.
