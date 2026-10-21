@@ -6,7 +6,9 @@ import time
 import uuid
 
 import jwt
+from jwt.utils import force_bytes
 
+import app.auth
 from tests.conftest import _private_key, auth, make_token, new_tenant
 
 PDF = b"%PDF-1.4\n% filestore test\n"
@@ -50,9 +52,14 @@ def test_expired_token_is_401(client):
     assert r.status_code == 401
 
 
-def test_hs256_token_is_401(client):
+def test_hs256_token_signed_with_the_public_key_is_401(client, monkeypatch):
+    # Algorithm confusion: an HS256 token whose HMAC secret is the RS256 public key would validate
+    # if HS256 were in the accepted algorithms. PyJWT itself refuses a PEM key as an HMAC secret,
+    # which would hide that; the test switches this guard off, so only the algorithms list of
+    # app.auth.get_claims keeps the token out.
+    monkeypatch.setattr(jwt.algorithms.HMACAlgorithm, "prepare_key", lambda self, key: force_bytes(key))
     token = jwt.encode({"tenant": ["RC100000"], "aud": "account", "exp": int(time.time()) + 300},
-                       "secret-of-at-least-32-bytes-length!!", algorithm="HS256")
+                       app.auth._PUBLIC_KEY, algorithm="HS256")
     r = client.get(f"/filestore/{uuid.uuid4()}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
 

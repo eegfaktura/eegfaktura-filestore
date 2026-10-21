@@ -24,6 +24,10 @@ this changelog highlights the changes relevant for overview and operations.
   artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
 
 ### Added
+- Test: an HS256 token signed with the RS256 public key as HMAC secret (algorithm confusion) gets
+  401. The test switches off PyJWT's own refusal of PEM keys as HMAC secrets, so it fails as soon as
+  `get_claims` accepts HS256; the former HS256 test used an unrelated secret and would have passed
+  either way. (platform#185)
 - CI: the full job runs `alembic check` after `alembic upgrade head`. (platform#185)
 - Tests (`tests/`, pytest with FastAPI's TestClient against the migrated PostgreSQL, run by the CI
   full job): requests without or with an invalid token (no `exp`, expired, HS256) get 401; a token
