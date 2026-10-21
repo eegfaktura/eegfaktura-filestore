@@ -2,6 +2,7 @@
 # categories, and an upload/download round trip for the own tenant.
 
 import json
+import os
 import time
 import uuid
 
@@ -9,6 +10,7 @@ import jwt
 from jwt.utils import force_bytes
 
 import app.auth
+from app.config import settings
 from tests.conftest import _private_key, auth, make_token, new_tenant
 
 PDF = b"%PDF-1.4\n% filestore test\n"
@@ -192,3 +194,34 @@ def test_graphql_upload_with_unknown_category_is_rejected(client):
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["addFile"] == {"__typename": "AddFileError", "message": "Invalid file category"}
+
+
+# --- GraphQL addFile with a forbidden attribute ---------------------------------------------------
+
+def test_graphql_upload_with_forbidden_attribute_stores_nothing(client):
+    # A default attribute key (here media_type) cannot be set by the client: "Forbidden Attribute",
+    # and neither a file row nor a file (stored or temporary) remains.
+    tenant = new_tenant()
+    upload(client, tenant, auth([tenant]))  # one regular file, so the tenant's storage and container exist
+    list_query = "query($t: String!) { files(tenant: $t) { id } }"
+    rows_before = gql(client, auth([tenant]), list_query, {"t": tenant}).json()["data"]["files"]
+    tmp_before = set(os.listdir(settings.FILESTORE_TEMP_DIR))
+
+    query = ("mutation($file: Upload!, $t: String!, $a: [AttributeInput!]) {"
+             " addFile(file: $file, name: \"x\", fileCategory: \"contract\", tenant: $t, attributes: $a) {"
+             " __typename ... on AddFileError { message } } }")
+    variables = {"file": None, "t": tenant,
+                 "a": [{"key": "member", "value": "1"}, {"key": "media_type", "value": "text/plain"}]}
+    r = client.post(
+        "/graphql",
+        headers=auth([tenant]),
+        data={"operations": json.dumps({"query": query, "variables": variables}),
+              "map": json.dumps({"0": ["variables.file"]})},
+        files={"0": ("x.pdf", PDF, "application/pdf")},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["addFile"] == {"__typename": "AddFileError",
+                                           "message": "Forbidden Attribute \"media_type\""}
+
+    assert gql(client, auth([tenant]), list_query, {"t": tenant}).json()["data"]["files"] == rows_before
+    assert set(os.listdir(settings.FILESTORE_TEMP_DIR)) == tmp_before
