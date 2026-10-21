@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-from typing import List
 
 import strawberry
 import uuid
@@ -31,7 +30,6 @@ from app.graphql.resolvers.file_resolver import add_file, delete_file
 # https://strawberry.rocks/docs/guides/permissions#accessing-user-information
 
 
-import strawberry
 
 
 @strawberry.type

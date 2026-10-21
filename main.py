@@ -17,9 +17,7 @@
 
 import app.dependencies
 from app.config import settings
-import asyncio
 import uvicorn
-from app.db.session import engine
 from app.app import create_app
 
 

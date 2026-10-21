@@ -18,9 +18,7 @@
 import strawberry
 import uuid
 
-from fastapi import Request, WebSocket
 import typing
-from strawberry import BasePermission
 from strawberry.types import Info
 
 from app.graphql.scalars.attribute_scalar import AttributeInput

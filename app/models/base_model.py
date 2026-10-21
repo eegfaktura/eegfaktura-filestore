@@ -25,7 +25,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 
-from app.config import settings
 
 
 class Base(DeclarativeBase):

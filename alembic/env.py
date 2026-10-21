@@ -21,7 +21,6 @@ if config.config_file_name is not None:
 
 
 from app.models import Base
-from app.models import File, FileCategory, FileAttribute, FileContainer, Storage
 from app.config import settings
 
 target_metadata = Base.metadata
@@ -98,7 +97,7 @@ def run_migrations_online() -> None:
         )
 
         with context.begin_transaction():
-            context.execute(f"SET search_path TO filestore, public")
+            context.execute("SET search_path TO filestore, public")
             context.run_migrations()
 
 

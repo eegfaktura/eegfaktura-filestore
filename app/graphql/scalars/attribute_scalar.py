@@ -18,7 +18,6 @@
 import uuid
 
 import strawberry
-from pydantic import Field
 import typing
 
 

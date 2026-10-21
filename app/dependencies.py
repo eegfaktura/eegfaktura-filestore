@@ -26,12 +26,10 @@ import shutil
 import urllib
 
 import uuid
-from datetime import datetime
 
 from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.inspection import inspect
-from sqlalchemy.orm import subqueryload
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
@@ -60,7 +58,7 @@ def get_valid_data(model_data_object, model_class):
     for column in model_class.__table__.columns:
         try:
             data_dict[column.name] = getattr(model_data_object, column.name)
-        except:
+        except Exception:
             pass
 
     return data_dict
@@ -68,7 +66,7 @@ def get_valid_data(model_data_object, model_class):
 
 def get_file_download_uri(file_id: uuid.UUID, caching: bool = False):
     return f"{settings.HTTP_FILE_DL_BASE_URI}/{file_id}" \
-           f"{'' if caching == True else '?' + str(time.time())}"
+           f"{'' if caching else '?' + str(time.time())}"
 
 
 async def get_file_download_metadata(file_id: uuid.UUID):
@@ -171,7 +169,7 @@ def delete_file(file_name: str):
 
     os.remove(file_name)
 
-0
+
 def move_file(file_source_name: str, file_target_name: str, overwrite: bool = True):
 
     target_path = os.path.dirname(file_target_name)

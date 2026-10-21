@@ -97,7 +97,7 @@ def get_claims(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
-        )
+        ) from e
     return Claims(**payload)
 
 

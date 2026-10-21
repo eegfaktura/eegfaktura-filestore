@@ -243,7 +243,7 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
 
     except FileNotFoundError as fnfe:
         # TODO Log error
-        raise HTTPException(status_code=400, detail=f"{fnfe.strerror} {fnfe.filename}")
+        raise HTTPException(status_code=400, detail=f"{fnfe.strerror} {fnfe.filename}") from fnfe
 
 
 #@router.post("/upload/{file_category}/{tenant}")

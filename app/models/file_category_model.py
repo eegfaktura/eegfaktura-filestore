@@ -18,16 +18,13 @@
 import uuid
 from typing import List
 
-from sqlalchemy import ForeignKey
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
-from sqlalchemy.sql import func, text
+from sqlalchemy.sql import text
 
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.dialects.postgresql import JSONB
 
 from . import Base
 

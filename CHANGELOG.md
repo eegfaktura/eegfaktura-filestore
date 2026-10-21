@@ -31,6 +31,10 @@ this changelog highlights the changes relevant for overview and operations.
   `invoice` are accepted (REST and GraphQL); upload and download for the own tenant. Test
   dependencies are pinned in `requirements-test.txt`; the tests generate their own RSA keypair.
   (platform#185)
+- CI: job "Lint" runs ruff with bug-finding rules only (`F`, `E7`, `B`; `ruff.toml`) and blocks.
+  Its findings are fixed: unused and duplicate imports removed, a stray expression statement
+  (`0`) removed, bare `except` → `except Exception`, `caching == True` → `caching`, and the two
+  re-raised `HTTPException`s chain their cause (`from e`). No behaviour change. (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
   migrations against PostgreSQL and an application start (full); a report-only check that
   requirements.txt pins every dependency.
