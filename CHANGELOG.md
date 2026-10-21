@@ -24,6 +24,9 @@ this changelog highlights the changes relevant for overview and operations.
   artifact is `test-results-requirements` (was `known-errors-requirements`). (platform#185)
 
 ### Added
+- Tests: a token with a wrong `aud` gets 401; a token with the realm role `superuser` reaches another
+  tenant's files (download, list, upload); GEA sub-community tenants (`GCxxxxxx-00n`) and their stem
+  (`GCxxxxxx`) reach the same files in both directions, another stem gets 403. (platform#185)
 - Test: an HS256 token signed with the RS256 public key as HMAC secret (algorithm confusion) gets
   401. The test switches off PyJWT's own refusal of PEM keys as HMAC secrets, so it fails as soon as
   `get_claims` accepts HS256; the former HS256 test used an unrelated secret and would have passed

@@ -64,6 +64,12 @@ def test_hs256_token_signed_with_the_public_key_is_401(client, monkeypatch):
     assert r.status_code == 401
 
 
+def test_token_with_wrong_audience_is_401(client):
+    token = make_token(["RC100000"], aud="eegfaktura-other")
+    r = client.get(f"/filestore/{uuid.uuid4()}", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+
+
 # --- own tenant: upload and download -------------------------------------------------------------
 
 def test_upload_and_download_own_tenant(client):
@@ -114,6 +120,55 @@ def test_graphql_files_lists_own_tenant(client):
     r = gql(client, auth([tenant]), "query($t: String!) { files(tenant: $t) { id fileCategory } }", {"t": tenant})
     assert r.status_code == 200, r.text
     assert r.json()["data"]["files"] == [{"id": file_id, "fileCategory": "invoice"}]
+
+
+def test_superuser_reaches_other_tenant(client):
+    # The realm role "superuser" skips the tenant check (Claims.is_superuser, as in the backend).
+    owner = new_tenant()
+    file_id = upload(client, owner, auth([owner])).json()["id"]
+    superuser = {"Authorization": f"Bearer {make_token([new_tenant()], realm_access={'roles': ['superuser']})}"}
+
+    assert client.get(f"/filestore/{file_id}", headers=superuser).status_code == 200
+    r = gql(client, superuser, "query($t: String!) { files(tenant: $t) { id } }", {"t": owner})
+    assert r.json()["data"]["files"] == [{"id": file_id}]
+    assert upload(client, owner, superuser).status_code == 200
+
+
+# --- GEA: sub-community tenants (GCxxxxxx-00n) share the files of their stem (GCxxxxxx) ----------
+
+def new_gea_stem() -> str:
+    return "GC" + str(uuid.uuid4().int)[:6]
+
+
+def test_gea_sub_community_token_reaches_stem_files(client):
+    stem = new_gea_stem()
+    r = upload(client, f"{stem}-003", auth([f"{stem}-003"]))  # stored under the stem
+    assert r.status_code == 200, r.text
+    file_id = r.json()["id"]
+
+    other_sub = auth([f"{stem}-001"])
+    assert client.get(f"/filestore/{file_id}", headers=other_sub).status_code == 200
+    r = gql(client, other_sub, "query($t: String!) { files(tenant: $t) { id } }", {"t": stem})
+    assert r.json()["data"]["files"] == [{"id": file_id}]
+
+
+def test_gea_stem_token_reaches_sub_community(client):
+    stem = new_gea_stem()
+    r = upload(client, f"{stem}-002", auth([stem]))
+    assert r.status_code == 200, r.text
+    file_id = r.json()["id"]
+
+    assert client.get(f"/filestore/{file_id}", headers=auth([stem])).status_code == 200
+    r = gql(client, auth([stem]), "query($t: String!) { files(tenant: $t) { id } }", {"t": f"{stem}-002"})
+    assert r.json()["data"]["files"] == [{"id": file_id}]
+
+
+def test_gea_other_stem_is_403(client):
+    stem = new_gea_stem()
+    file_id = upload(client, stem, auth([stem])).json()["id"]
+    other = auth([f"{new_gea_stem()}-001"])
+    assert client.get(f"/filestore/{file_id}", headers=other).status_code == 403
+    assert upload(client, f"{stem}-001", other).status_code == 403
 
 
 # --- file categories: only contract and invoice --------------------------------------------------
