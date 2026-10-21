@@ -72,6 +72,13 @@ def test_upload_and_download_own_tenant(client):
     assert r.headers["content-type"] == "application/pdf"
 
 
+def test_tenant_in_path_case_insensitive(client):
+    # the other direction of the check above: lowercase tenant in the path, uppercase in the token
+    tenant = new_tenant()
+    r = upload(client, tenant.lower(), auth([tenant]))
+    assert r.status_code == 200, r.text
+
+
 # --- other tenant --------------------------------------------------------------------------------
 
 def test_upload_for_other_tenant_is_403(client):

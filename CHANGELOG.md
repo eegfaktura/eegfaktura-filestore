@@ -36,8 +36,8 @@ this changelog highlights the changes relevant for overview and operations.
   (`0`) removed, bare `except` → `except Exception`, `caching == True` → `caching`, and the two
   re-raised `HTTPException`s chain their cause (`from e`). No behaviour change. (platform#185)
 - CI: `pr-checks.yml` on every pull request: byte-compile and import (unit), Alembic
-  migrations against PostgreSQL and an application start (full); a report-only check that
-  requirements.txt pins every dependency.
+  migrations against PostgreSQL and an application start (full); a check that requirements.txt pins
+  every dependency (report-only at first, now blocking, see below).
 - CI: `security-scan.yml` on every pull request, on pushes to the default branch and weekly:
   leaked secrets in the new commits (Gitleaks, Trivy), vulnerable dependencies (Trivy,
   OSV-Scanner) and misconfigurations (Trivy). For now the dependency and misconfiguration

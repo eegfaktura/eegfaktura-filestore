@@ -10,7 +10,7 @@
 # (2026-09-30), postgres 15.19-alpine (2026-09-21, the major of the production database); ruff
 # 0.17.0 (2026-10-09, checked 2026-10-21; test dependencies in requirements-test.txt likewise).
 # Actions pinned by commit SHA.
-# Every job keeps its output as an artifact for 30 days (test-results-<job>, known-errors-<job>),
+# Every job keeps its output as an artifact for 30 days (test-results-<job>),
 # for the CI report collector (vfeeg-development/eegfaktura-dev).
 
 name: PR Checks
