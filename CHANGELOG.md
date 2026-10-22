@@ -8,6 +8,17 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- strawberry-graphql 0.320.0 → 0.327.2: closes PYSEC-2026-4303 (fixed in 0.326.1, the Trivy
+  HIGH finding; a permission check returning an awaitable from a plain `def` passed as allowed)
+  and PYSEC-2026-4302 (fixed in 0.327.2, found by pip-audit). The filestore uses no strawberry
+  permission classes, and the breaking changes in between (removed `Extension` alias, schema
+  directives, cache extension defaults, graphql-ws subscriptions) touch no API it uses. One
+  visible change: since 0.322.1 a non-string variable value for a `UUID` argument (e.g.
+  `file_id`, `user_id`) gets a standard GraphQL coercion error instead of an unhandled server
+  error. strawberry 0.323.1 raised its minimum typing-extensions to 4.14.0; the pinned 4.15.0
+  satisfies it, so no other pin changes. (platform#185)
+
 ## [1.0.7] – 2026-10-21
 
 ### Added
