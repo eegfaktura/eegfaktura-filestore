@@ -19,6 +19,10 @@ this changelog highlights the changes relevant for overview and operations.
   error. strawberry 0.323.1 raised its minimum typing-extensions to 4.14.0; the pinned 4.15.0
   satisfies it, so no other pin changes. (platform#185)
 
+### Changed
+- certifi 2026.7.22 → 2026.10.19 (test dependency only, `requirements-test.txt`; not in the image):
+  the CA bundle drops the root "emSign ECC Root CA - G3". No advisory. Replaces Dependabot PR #49.
+
 ## [1.0.7] – 2026-10-21
 
 ### Added
