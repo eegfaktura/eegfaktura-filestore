@@ -8,6 +8,11 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Changed
+- Dependabot (Docker base images): no more major updates (legacy system, replaced by v3 in the medium term; majors
+  only for security reasons, decision 23.10.2026), patch and minor updates come in one weekly grouped PR, new versions
+  only after a 7-day cooldown. Security updates for the language ecosystems are unaffected.
+
 ### Security
 - strawberry-graphql 0.320.0 → 0.327.2: closes PYSEC-2026-4303 (fixed in 0.326.1, the Trivy
   HIGH finding; a permission check returning an awaitable from a plain `def` passed as allowed)
