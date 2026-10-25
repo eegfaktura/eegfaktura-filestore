@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.8] – 2026-10-25
+
 ### Security
 - strawberry-graphql 0.320.0 → 0.327.2: closes PYSEC-2026-4303 (fixed in 0.326.1, the Trivy
   HIGH finding; a permission check returning an awaitable from a plain `def` passed as allowed)
