@@ -8,6 +8,11 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- certifi 2026.7.22 → 2026.10.19 (GHSA-6q48-6c7w-9gw2, Dependabot #54, critical; test dependency only,
+  `requirements-test.txt`, not in the image): the CA bundle drops the root "emSign ECC Root CA - G3", whose
+  intermediate CA keys were compromised. Published 2026-10-20. Replaces Dependabot PR #49.
+
 ## [1.0.8] – 2026-10-25
 
 ### Security
