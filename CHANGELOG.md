@@ -8,6 +8,8 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+## [1.0.9] – 2026-10-28
+
 ### Security
 - **Slim runtime image** (prod image scan 2026-10-28): `gcc`, `libc6-dev` and `libpq-dev` (with `libssl-dev` and
   the other header packages they pull in) were installed in the runtime image to build `psycopg2`. The Dockerfile
