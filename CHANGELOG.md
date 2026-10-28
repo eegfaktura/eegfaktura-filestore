@@ -8,6 +8,15 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **Slim runtime image** (prod image scan 2026-10-28): `gcc`, `libc6-dev` and `libpq-dev` (with `libssl-dev` and
+  the other header packages they pull in) were installed in the runtime image to build `psycopg2`. The Dockerfile
+  now has a build stage that installs the Python packages into a virtualenv (`/opt/venv`); the runtime stage (same
+  `python:3.13-slim-bookworm`) copies that venv and installs only `libpq5`. The base image's own pip is removed (it
+  was upgraded before; `pip` is now the upgraded one in the venv). `entrypoint.sh`, `alembic` and `python3` are
+  found through `PATH` (`/opt/venv/bin` first); working directory, user `app` (1000), environment, port and command
+  are unchanged.
+
 ### Fixed
 - **CI: the Snyk Code scan fails visibly when it cannot run.** An invalid `SNYK_TOKEN` ended the weekly and
   push scan green without any result (`continue-on-error`); now only „issues found“ keeps the run green (the

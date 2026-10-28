@@ -15,6 +15,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+# Build-Stage: Compiler und libpq-Header nur hier (psycopg2 wird aus den Quellen gebaut).
+# Die Pakete landen in einem venv, das die Laufzeit-Stage uebernimmt.
+FROM python:3.13-slim-bookworm AS builder
+
+RUN apt-get update && apt-get -y install --no-install-recommends libpq-dev gcc libc6-dev
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+COPY requirements.txt requirements.txt
+RUN pip3 install --no-cache-dir --upgrade pip && pip3 install --no-cache-dir --upgrade -r requirements.txt
+
 FROM python:3.13-slim-bookworm
 LABEL org.vfeeg.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
 LABEL org.vfeeg.image.authors="eegfaktura@vfeeg.org"
@@ -30,9 +40,14 @@ LABEL version="0.1.0"
 
 WORKDIR /vfeeg-filestore
 
-COPY requirements.txt requirements.txt
-RUN apt-get update && apt-get -y upgrade && apt-get -y install --no-install-recommends libpq-dev gcc libc6-dev
-RUN pip3 install --no-cache-dir --upgrade pip && pip3 install --no-cache-dir --upgrade -r requirements.txt
+# Laufzeit: nur die libpq-Bibliothek (psycopg2), kein Compiler, keine Header.
+# Das pip des Basis-Images wird entfernt (bisher per Upgrade ersetzt); `pip` im PATH ist das
+# aktualisierte pip im venv.
+RUN apt-get update && apt-get -y upgrade && apt-get -y install --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m pip uninstall -y pip
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
 COPY . .
 
 # Non-root runtime user (Pod-Security-Admission "restricted" + Defense-in-Depth).
