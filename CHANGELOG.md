@@ -14,6 +14,9 @@ this changelog highlights the changes relevant for overview and operations.
   the push credentials. Now every action is pinned to a commit, the same SHAs `pr-checks.yml` and `security-scan.yml` already
   use where the action is the same, otherwise the commit the floating tag pointed to on 2026-10-28.
 
+### Fixed
+- **JWT key file** (eegfaktura-dev tracking filestore 16): security relevant — details not published.
+
 ## [1.0.9] – 2026-10-28
 
 ### Security
