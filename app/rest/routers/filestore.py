@@ -23,6 +23,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import selectinload
 from starlette.responses import JSONResponse
 
@@ -232,9 +233,15 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
                 s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
                                                          value=str(os.path.getsize(targetfile))))
 
-                await s.commit()
             except BaseException:
-                # No row refers to the file when the commit fails: leave nothing on disk
+                # Nothing is committed yet: leave nothing on disk
+                discard_files(tmpfilename, targetfile)
+                raise
+            try:
+                await s.commit()
+            except (IntegrityError, DataError):
+                # The database refused the rows, so no row refers to the file. Any other failure here (e.g. a dropped
+                # connection) may still have committed: the file then stays, an orphan at worst
                 discard_files(tmpfilename, targetfile)
                 raise
 

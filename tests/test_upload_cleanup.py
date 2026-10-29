@@ -84,3 +84,23 @@ def test_rest_upload_failing_at_commit_leaves_no_file(client):
                     files={"file": ("x." + "p" * 600, PDF, "application/pdf")})
 
     assert files_on_disk() == disk_before
+
+
+def test_graphql_upload_with_too_long_name_stores_nothing(client):
+    tenant = tenant_with_one_file(client)
+    rows_before, disk_before = file_rows(client, tenant), files_on_disk()
+    query = ADD_FILE.replace('name: "x"', 'name: "' + "n" * 129 + '"')
+    assert query != ADD_FILE
+
+    r = client.post(
+        "/graphql",
+        headers=auth([tenant]),
+        data={"operations": json.dumps({"query": query, "variables": {"file": None, "t": tenant, "a": []}}),
+              "map": json.dumps({"0": ["variables.file"]})},
+        files={"0": ("x.pdf", PDF, "application/pdf")},
+    )
+
+    assert r.json()["data"]["addFile"] == {"__typename": "AddFileError",
+                                           "message": "Invalid name: up to 128 characters"}, r.text
+    assert file_rows(client, tenant) == rows_before
+    assert files_on_disk() == disk_before

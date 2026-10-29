@@ -23,6 +23,7 @@ import app.dependencies
 from app.file_metadata import allowed_media_types, allowed_file_categories
 from fastapi import UploadFile
 from sqlalchemy import select, delete
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import load_only, selectinload, contains_eager
 
 from app.auth import base_tenant
@@ -171,6 +172,8 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
         # Do not allow to override default attributes, and only attributes the table takes (key unique
         # per file, up to 128 characters, a value up to 512); checked before anything is written (the
         # upload would otherwise leave its temporary file behind)
+        if name is not None and len(name) > 128:
+            return AddFileError(message="Invalid name: up to 128 characters")
         keys = set()
         for attribute in attributes or []:
             if attribute.key in (['orig_file_name', 'file_extension', 'media_type', 'file_bytes']):
@@ -257,9 +260,15 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                 s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
                                                          value=str(os.path.getsize(targetfile))))
 
-                await s.commit()
             except BaseException:
-                # No row refers to the file when the commit fails: leave nothing on disk
+                # Nothing is committed yet: leave nothing on disk
+                discard_files(tmpfilename, targetfile)
+                raise
+            try:
+                await s.commit()
+            except (IntegrityError, DataError):
+                # The database refused the rows, so no row refers to the file. Any other failure here (e.g. a dropped
+                # connection) may still have committed: the file then stays, an orphan at worst
                 discard_files(tmpfilename, targetfile)
                 raise
 
@@ -357,12 +366,12 @@ async def delete_file(info, id: uuid.UUID):
         (await s.delete(file))
         (await s.commit())
 
-    # Delete file from Filesystem. The row is gone already, so the file is deleted for the client; a file
-    # that cannot be removed stays as an orphan on disk and is logged (ids only)
+    # Delete file from Filesystem. The row is gone already: a file that is missing on disk counts as deleted and is
+    # logged (ids only); any other error (e.g. no permission) is still reported to the client
     try:
         app.dependencies.delete_file(
             f"{settings.FILESTORE_LOCAL_BASE_DIR}/{storage.id}/{file.file_container_id}/{file.id}")
-    except OSError as e:
+    except FileNotFoundError as e:
         logger.warning("deleteFile: file %s (storage %s, container %s) not removed from disk: %s",
                        file.id, storage.id, file.file_container_id, type(e).__name__)
 
