@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
+import logging
 import os.path
 import typing
 import uuid
@@ -32,6 +33,8 @@ from app.dependencies import get_valid_data, upload_file, move_file, get_absolut
 from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, AddFile, AddFileError, DeleteFile, DeleteFileError
+
+logger = logging.getLogger(__name__)
 
 
 async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], category: str, user_id: uuid.UUID,
@@ -354,7 +357,13 @@ async def delete_file(info, id: uuid.UUID):
         (await s.delete(file))
         (await s.commit())
 
-    # Delete file from Filesystem
-    app.dependencies.delete_file(f"{settings.FILESTORE_LOCAL_BASE_DIR}/{storage.id}/{file.file_container_id}/{file.id}")
+    # Delete file from Filesystem. The row is gone already, so the file is deleted for the client; a file
+    # that cannot be removed stays as an orphan on disk and is logged (ids only)
+    try:
+        app.dependencies.delete_file(
+            f"{settings.FILESTORE_LOCAL_BASE_DIR}/{storage.id}/{file.file_container_id}/{file.id}")
+    except OSError as e:
+        logger.warning("deleteFile: file %s (storage %s, container %s) not removed from disk: %s",
+                       file.id, storage.id, file.file_container_id, type(e).__name__)
 
     return DeleteFile(id=file.id)

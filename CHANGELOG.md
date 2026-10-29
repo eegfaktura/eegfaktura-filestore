@@ -17,6 +17,7 @@ this changelog highlights the changes relevant for overview and operations.
 ### Fixed
 - **JWT key file** (eegfaktura-dev tracking filestore 16): security relevant — details not published.
 - **A failed upload no longer leaves its file on disk** (eegfaktura-dev tracking filestore 261005-ca1). GraphQL `addFile` rejects duplicate attribute keys, keys over 128 and values over 512 characters (or without a value) with an `AddFileError` before anything is written; formerly the database refused them at the commit, after the file had been moved into place. When the commit of an upload fails anyway (REST or GraphQL, e.g. a file extension over 512 characters), the stored and the temporary file are removed.
+- **`deleteFile` no longer fails after the row is gone** (eegfaktura-dev tracking filestore 3). The row is deleted first; when the file cannot be removed from disk afterwards (e.g. it is already missing), the mutation now answers `DeleteFile` instead of an error (the file was deleted for the client) and logs the leftover with its ids only.
 
 ## [1.0.9] – 2026-10-28
 
