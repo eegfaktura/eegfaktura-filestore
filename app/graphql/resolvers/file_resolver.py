@@ -23,7 +23,7 @@ import app.dependencies
 from app.file_metadata import allowed_media_types, allowed_file_categories
 from fastapi import UploadFile
 from sqlalchemy import select, delete
-from sqlalchemy.exc import DataError, IntegrityError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import load_only, selectinload, contains_eager
 
 from app.auth import base_tenant
@@ -266,10 +266,11 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                 raise
             try:
                 await s.commit()
-            except (IntegrityError, DataError):
-                # The database refused the rows, so no row refers to the file. Any other failure here (e.g. a dropped
-                # connection) may still have committed: the file then stays, an orphan at worst
-                discard_files(tmpfilename, targetfile)
+            except DBAPIError as e:
+                # The database refused the rows (the connection is still valid), so no row refers to the file. A lost
+                # connection or any other failure here may still have committed: the file then stays, an orphan at worst
+                if not e.connection_invalidated:
+                    discard_files(tmpfilename, targetfile)
                 raise
 
         file_dict = db_file.as_dict()
