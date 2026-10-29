@@ -16,6 +16,7 @@
 #
 
 
+import contextlib
 import errno
 import os.path
 import re
@@ -168,6 +169,13 @@ def delete_file(file_name: str):
         )
 
     os.remove(file_name)
+
+
+def discard_files(*file_names: str):
+    """Remove the files of a failed upload; each may or may not exist."""
+    for file_name in file_names:
+        with contextlib.suppress(OSError):
+            os.remove(file_name)
 
 
 def move_file(file_source_name: str, file_target_name: str, overwrite: bool = True):
