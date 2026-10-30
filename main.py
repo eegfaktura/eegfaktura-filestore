@@ -17,17 +17,21 @@
 
 import logging
 
-import app.dependencies
-from app.config import settings
+# The logging setup comes first, so lines (and warnings) written while the application's modules
+# are imported already go through it; uvicorn imports this module again for "main:application".
 from app.logging_config import configure_logging
-import uvicorn
-from app.app import create_app
+
+configure_logging()
+
+import app.dependencies  # noqa: E402
+from app.config import settings  # noqa: E402
+import uvicorn  # noqa: E402
+from app.app import create_app  # noqa: E402
 
 
 application = create_app()
 
 if __name__ == "__main__":
-    configure_logging()
     app.dependencies.check_tmp_dir()
     logging.getLogger(__name__).info("Starting uvicorn server...")
     # log_config=None: uvicorn keeps the setup above; access_log=False: app.access_log writes the access line

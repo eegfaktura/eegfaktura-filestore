@@ -17,7 +17,7 @@
 
 # One access line per HTTP request (event.action=http.access), written when the response is done,
 # so it carries the tenant and client the token check put into the request's log context
-# (app.auth). Route template only — no raw path, no query, no client address, no user agent, no
+# (app.logging_config.log_context, set here; app.auth adds to it). Route template only — no raw path, no query, no client address, no user agent, no
 # user (no user tracking). Kubernetes' own probe requests are left out (app.health.is_kube_probe).
 
 import logging
@@ -61,8 +61,9 @@ def _route_template(scope) -> Optional[str]:
     return getattr(effective, "path_format", None) or getattr(scope.get("route"), "path", None)
 
 
-def _outcome(status: int) -> str:
-    if status in (401, 403):
+def _outcome(status: int, ctx: dict) -> str:
+    # a refused tenant check inside GraphQL answers 200 with the error in the body
+    if status in (401, 403) or ctx.get("_refused"):
         return "refused"
     return "failure" if status >= 400 else "success"
 
@@ -78,8 +79,7 @@ class AccessLogMiddleware:
         headers = dict(scope.get("headers") or [])
         ctx = {"request.id": _request_id(headers.get(b"x-request-id"))}
         ctx.update(_trace_ids(headers.get(b"traceparent")))
-        # request.state is backed by scope["state"]: the token check adds tenant.id and client.id here.
-        scope.setdefault("state", {})["log_context"] = ctx
+        # the token check (app.auth) adds tenant.id and client.id to this dict
         token = log_context.set(ctx)
         status = 500  # stays when the application fails before it answers
         start = time.perf_counter_ns()
@@ -92,20 +92,28 @@ class AccessLogMiddleware:
                                       (b"x-request-id", ctx["request.id"].encode("latin-1"))]
             await send(message)
 
+        failed = False
         try:
             await self.app(scope, receive, send_with_status)
+        except BaseException:
+            failed = True
+            raise
         finally:
             if not is_kube_probe(scope):
                 route = _route_template(scope)
                 logger.info("%s %s %s", scope["method"], route or "-", status, extra={
                     "event.action": "http.access",
-                    "event.outcome": _outcome(status),
+                    "event.outcome": _outcome(status, ctx),
                     "event.duration": time.perf_counter_ns() - start,
                     "http.request.method": scope["method"],
                     "http.route": route,
                     "http.response.status_code": status,
                 })
-            log_context.reset(token)
+            # After an unhandled error the context stays set, so the traceback line the server
+            # writes afterwards in this request's task still carries request.id (each request runs
+            # in a task of its own, so nothing leaks into the next request).
+            if not failed:
+                log_context.reset(token)
 
 
 class GraphQLOperationName(SchemaExtension):

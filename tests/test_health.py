@@ -159,3 +159,21 @@ def test_only_the_exact_probe_paths_are_marked():
 def test_only_kube_probe_user_agents_are_marked():
     assert not _marked("/readyz", user_agent=b"curl/8.0")
     assert not _marked("/readyz", user_agent=b"Mozilla/5.0 kube-probe/1.31")
+
+
+def test_the_shared_ping_does_not_carry_a_callers_request_context(monkeypatch):
+    from app.logging_config import log_context
+
+    seen = []
+
+    async def ping():
+        seen.append(log_context.get())
+
+    monkeypatch.setattr(app.health, "_ping_db", ping)
+
+    async def run():
+        log_context.set({"request.id": "first-caller"})
+        return await app.health._ready()
+
+    assert asyncio.run(run()) is True
+    assert seen == [None]

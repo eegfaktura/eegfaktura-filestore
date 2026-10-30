@@ -20,6 +20,7 @@
 # or hosts in the body; the reason a readiness check fails goes to the log.
 
 import asyncio
+import contextvars
 import logging
 import time
 from typing import Optional
@@ -103,7 +104,8 @@ async def _ready() -> bool:
     if _last_result is not None and time.monotonic() - _last_result[0] < RESULT_MAX_AGE_SECONDS:
         return _last_result[1]
     if _running is None or _running.done():
-        _running = asyncio.create_task(_check())
+        # an empty context: the ping is shared, its warnings must not carry the first caller's request.id
+        _running = asyncio.create_task(_check(), context=contextvars.Context())
     # shield: a caller that goes away does not cancel the ping the others wait for.
     return await asyncio.shield(_running)
 

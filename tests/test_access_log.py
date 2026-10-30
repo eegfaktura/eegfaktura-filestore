@@ -75,7 +75,7 @@ def _assert_nothing_personal(raw: str, token: str):
         assert value not in raw
 
 
-def test_rest_access_line_has_route_template_tenant_and_client(client, access_lines):
+def test_rest_refusal_has_route_template_and_client_but_no_tenant(client, access_lines):
     tenant = new_tenant()
     token, headers = _personal_headers([new_tenant()])
     user_id = uuid.uuid4()
@@ -94,7 +94,7 @@ def test_rest_access_line_has_route_template_tenant_and_client(client, access_li
     assert isinstance(line["event.duration"], int) and line["event.duration"] > 0
     assert line["request.id"] == "req-123"
     assert line["trace.id"] == TRACE_ID and line["span.id"] == SPAN_ID
-    assert line["tenant.id"] == tenant
+    assert "tenant.id" not in line  # only after a passed check
     assert line["client.id"] == "eegfaktura-web"
     raw = json.dumps(line)
     assert str(user_id) not in raw
@@ -160,3 +160,57 @@ def test_a_caller_request_id_is_kept_only_when_it_is_a_plain_token(value, kept):
 ])
 def test_traceparent(value, ok):
     assert bool(_trace_ids(value.encode())) is ok
+
+
+def test_rest_tenant_is_logged_upper_case_after_a_passed_check(client, access_lines):
+    tenant = new_tenant()
+    _, headers = _personal_headers([tenant])
+    r = client.post(f"/filestore/upload/invoice/{tenant.lower()}/{uuid.uuid4()}", headers=headers,
+                    files={"file": ("a.exe", b"MZ", "application/x-msdownload")})
+    assert r.status_code == 400  # rejected after the tenant check
+    (line,) = access_lines()
+    assert line["tenant.id"] == tenant
+    assert line["event.outcome"] == "failure"
+
+
+def _graphql(client, headers, query, variables):
+    return client.post("/graphql", headers=headers, json={"query": query, "variables": variables})
+
+
+def test_graphql_tenant_refusal_is_logged_as_refused(client, access_lines):
+    _, headers = _personal_headers([new_tenant()])
+    r = _graphql(client, headers, "query Q($t: String!) { files(tenant: $t) { id } }", {"t": new_tenant()})
+    assert r.status_code == 200 and "Tenant not allowed" in r.text
+    (line,) = access_lines()
+    assert line["event.outcome"] == "refused"
+    assert "tenant.id" not in line
+
+
+def test_graphql_mixed_tenant_checks_are_refused_without_tenant(client, access_lines):
+    own = new_tenant()
+    _, headers = _personal_headers([own])
+    query = "query Q($a: String!, $b: String!) { x: files(tenant: $b) { id } y: files(tenant: $a) { id } }"
+    r = _graphql(client, headers, query, {"a": own, "b": new_tenant()})
+    assert r.status_code == 200 and "Tenant not allowed" in r.text
+    (line,) = access_lines()
+    assert line["event.outcome"] == "refused"
+    assert "tenant.id" not in line
+
+
+def test_the_context_survives_an_unhandled_error_for_the_traceback_line():
+    import asyncio
+
+    from app.access_log import AccessLogMiddleware
+    from app.logging_config import log_context
+
+    async def failing_app(scope, receive, send):
+        raise RuntimeError("boom")
+
+    async def run():
+        scope = {"type": "http", "method": "GET", "path": "/x", "headers": [(b"x-request-id", b"req-500")]}
+        try:
+            await AccessLogMiddleware(failing_app)(scope, None, None)
+        except RuntimeError:
+            return (log_context.get() or {}).get("request.id")
+
+    assert asyncio.run(run()) == "req-500"

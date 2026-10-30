@@ -24,10 +24,10 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.config import settings
-from app.logging_config import request_log_context
+from app.logging_config import current_log_context, record_tenant_check
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +85,6 @@ class Claims(BaseModel):
     realm_access: dict = Field(default_factory=dict)
     # the Keycloak client the token was issued to (the integration, not a person): client.id in the log
     azp: Optional[str] = None
-    # the request's log context (app.access_log): the checked tenant goes into the access line
-    _log_context: dict = PrivateAttr(default_factory=dict)
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -101,11 +99,13 @@ class Claims(BaseModel):
         return "superuser" in self.roles
 
     def assert_tenant(self, tenant: str) -> None:
-        self._log_context["tenant.id"] = tenant
+        # the request's log context (app.access_log): tenant.id after a passed check, or "refused"
         if self.is_superuser():
+            record_tenant_check(tenant, True)
             return
         wanted = base_tenant(tenant).upper()
         allowed = {base_tenant(t).upper() for t in self.tenants}
+        record_tenant_check(tenant, wanted in allowed)
         if wanted not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -114,7 +114,6 @@ class Claims(BaseModel):
 
 
 def get_claims(
-    request: Request,
     creds: HTTPAuthorizationCredentials = Depends(_bearer),
 ) -> Claims:
     try:
@@ -132,9 +131,8 @@ def get_claims(
             detail="Invalid token",
         ) from e
     claims = Claims(**payload)
-    claims._log_context = request_log_context(request)
     if claims.azp:
-        claims._log_context["client.id"] = claims.azp
+        current_log_context()["client.id"] = claims.azp
     return claims
 
 

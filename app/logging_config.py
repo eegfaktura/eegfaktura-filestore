@@ -24,6 +24,7 @@ import contextvars
 import json
 import logging
 import logging.config
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -48,14 +49,15 @@ log_context: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("lo
 
 
 def parse_level(value: str) -> int:
-    level = LEVELS.get((value or "").strip().lower())
+    # empty (set but blank) means the default
+    level = LEVELS.get((value or "").strip().lower() or "info")
     if level is None:
         raise ValueError(f"LOG_LEVEL={value!r} is not one of {', '.join(LEVELS)}")
     return level
 
 
 def parse_format(value: str) -> str:
-    fmt = (value or "").strip().lower()
+    fmt = (value or "").strip().lower() or "text"
     if fmt not in FORMATS:
         raise ValueError(f"LOG_FORMAT={value!r} is not one of {', '.join(FORMATS)}")
     return fmt
@@ -73,9 +75,36 @@ def _level_name(levelno: int) -> str:
     return "error"
 
 
-def request_log_context(request) -> dict:
-    """The per-request field dict the middleware put on request.state (a throw-away dict without it)."""
-    return getattr(request.state, "log_context", None) or {}
+def current_log_context() -> dict:
+    """The request's field dict set by the access-log middleware (a throw-away dict outside a request).
+
+    The one source of the per-request fields: the middleware sets it, the token check adds to it,
+    the formatter and the access line read it. Keys starting with "_" are internal, never written.
+    """
+    ctx = log_context.get()
+    return ctx if ctx is not None else {}
+
+
+def record_tenant_check(tenant: str, allowed: bool) -> None:
+    """Note a tenant check in the request's context: tenant.id only when every check of the request
+    passed and all were for the same tenant; a refused check marks the request as refused."""
+    ctx = current_log_context()
+    if allowed:
+        ctx.setdefault("_tenants", set()).add((tenant or "").upper())
+    else:
+        ctx["_refused"] = True
+    tenants = ctx.get("_tenants", set())
+    if not ctx.get("_refused") and len(tenants) == 1:
+        ctx["tenant.id"] = next(iter(tenants))
+    else:
+        ctx.pop("tenant.id", None)
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _escape_control(text: str) -> str:
+    return _CONTROL.sub(lambda m: m.group().encode("unicode_escape").decode("ascii"), text)
 
 
 class _Formatter(logging.Formatter):
@@ -119,11 +148,12 @@ class TextFormatter(_Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         f = self.fields(record)
-        line = f"{f['@timestamp']} {f['log.level']:<5} {f['log.logger']}: {f['message']}"
+        # one record, one line: control characters (a message's newlines, ...) are escaped
+        line = f"{f['@timestamp']} {f['log.level']:<5} {f['log.logger']}: {_escape_control(f['message'])}"
         for key, value in f.items():
             if key not in self._HEAD:
                 value = str(value)
-                if not value or any(c in value for c in ' "=\n'):
+                if not value or any(c in value for c in ' "=') or _CONTROL.search(value):
                     value = json.dumps(value, ensure_ascii=False)
                 line += f" {key}={value}"
         if "error.stack_trace" in f:
@@ -145,7 +175,8 @@ def dict_config(level: int, fmt: str, service_version: str) -> dict:
             # uvicorn's own lines go to the root handler; its access line is replaced by the
             # application's (app.access_log: route template, no client address, no query).
             "uvicorn": {"handlers": [], "propagate": True},
-            "uvicorn.error": {"handlers": [], "propagate": True},
+            # never below debug: uvicorn logs connections ("HTTP connection made", client IP:port) at trace
+            "uvicorn.error": {"handlers": [], "propagate": True, "level": max(level, logging.DEBUG)},
             "uvicorn.access": {"handlers": ["null"], "propagate": False},
         },
         "root": {"level": level, "handlers": ["stdout"]},
@@ -153,7 +184,9 @@ def dict_config(level: int, fmt: str, service_version: str) -> dict:
 
 
 def configure_logging() -> None:
-    """Apply the logging setup from the settings; an unknown LOG_LEVEL or LOG_FORMAT stops the start."""
+    """Apply the logging setup from the settings; an unknown LOG_LEVEL or LOG_FORMAT stops the start;
+    an empty value means the default."""
     level = parse_level(settings.LOG_LEVEL)
     fmt = parse_format(settings.LOG_FORMAT)
     logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION))
+    logging.captureWarnings(True)

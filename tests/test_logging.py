@@ -42,12 +42,13 @@ def _record(level=logging.INFO, msg="hello %s", args=("world",), exc_info=None, 
 @pytest.mark.parametrize("value,level", [
     ("trace", logging_config.TRACE), ("debug", logging.DEBUG), ("INFO", logging.INFO),
     ("warn", logging.WARNING), ("warning", logging.WARNING), (" error ", logging.ERROR),
+    ("", logging.INFO), ("  ", logging.INFO),  # set but empty: the default
 ])
 def test_known_levels_are_accepted(value, level):
     assert parse_level(value) == level
 
 
-@pytest.mark.parametrize("value", ["", "verbose", "critical", "5"])
+@pytest.mark.parametrize("value", ["verbose", "critical", "5"])
 def test_an_unknown_level_is_refused(value):
     with pytest.raises(ValueError, match="LOG_LEVEL"):
         parse_level(value)
@@ -56,6 +57,7 @@ def test_an_unknown_level_is_refused(value):
 def test_formats():
     assert parse_format("JSON") == "json"
     assert parse_format("text") == "text"
+    assert parse_format("") == "text"
     with pytest.raises(ValueError, match="LOG_FORMAT"):
         parse_format("ecs")
 
@@ -155,3 +157,37 @@ def test_an_unknown_log_level_stops_the_start():
     r = _run(_SETUP, LOG_LEVEL="verbose")
     assert r.returncode != 0
     assert "LOG_LEVEL='verbose'" in r.stderr
+
+
+def test_text_line_escapes_control_characters():
+    msg = 'forged' + chr(10) + '2026-01-01T00:00:00.000Z error x: injected' + chr(27) + '[31m'
+    line = TextFormatter().format(_record(msg=msg, args=None))
+    assert chr(10) not in line and chr(27) not in line
+    assert 'forged' + chr(92) + 'n2026' in line and chr(92) + 'x1b[31m' in line
+
+
+def test_uvicorn_connection_lines_stay_out_even_at_trace():
+    code = ("import logging; from app.logging_config import configure_logging; configure_logging(); "
+            "logging.getLogger('uvicorn.error').log(5, '%s - HTTP connection made', '203.0.113.7:51234'); "
+            "logging.getLogger('uvicorn.error').debug('uvicorn debug'); "
+            "logging.getLogger('app.x').log(5, 'app trace')")
+    r = _run(code, LOG_FORMAT="json", LOG_LEVEL="trace")
+    assert r.returncode == 0, r.stderr
+    assert [json.loads(line)["message"] for line in r.stdout.splitlines()] == ["uvicorn debug", "app trace"]
+    assert "203.0.113.7" not in r.stdout + r.stderr
+
+
+def test_empty_log_level_and_format_mean_the_defaults():
+    r = _run(_SETUP, LOG_LEVEL="", LOG_FORMAT="")
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert len(lines) == 2 and not lines[0].startswith("{")  # text, info: no debug line
+    assert "dbg" not in r.stdout
+
+
+def test_warnings_go_through_the_logging_setup():
+    r = _run(_SETUP + "; import warnings; warnings.warn('careful')", LOG_FORMAT="json")
+    assert r.returncode == 0, r.stderr
+    docs = [json.loads(line) for line in r.stdout.splitlines()]
+    assert docs[-1]["log.logger"] == "py.warnings" and "careful" in docs[-1]["message"]
+    assert r.stderr == ""
