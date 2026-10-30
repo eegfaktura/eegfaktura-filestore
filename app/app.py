@@ -15,8 +15,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-import logging
-
 from fastapi import FastAPI
 import strawberry
 from strawberry.fastapi import GraphQLRouter
@@ -45,5 +43,5 @@ def create_app():
     app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")
     app.include_router(health.router)
-    logging.getLogger("uvicorn.access").addFilter(health.ProbeAccessLogFilter())
+    app.add_middleware(health.ProbeAccessLogMiddleware)
     return app

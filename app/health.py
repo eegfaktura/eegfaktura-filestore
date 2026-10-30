@@ -1,5 +1,5 @@
 # vfeeg-filestor File handling for eegFaktura
-# Copyright (C) 2023  Matthias Poettinger
+# Copyright (C) 2026  Matthias Martetschläger
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -20,17 +20,21 @@
 # or hosts in the body; the reason a readiness check fails goes to the log.
 
 import asyncio
+import contextvars
 import logging
+import time
+from typing import Optional
 
+import asyncpg
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import text
 
 from app.db import session as db_session
 
 logger = logging.getLogger(__name__)
 
 READY_TIMEOUT_SECONDS = 2.0
+RESULT_MAX_AGE_SECONDS = 1.0
 PROBE_PATHS = ("/healthz", "/readyz")
 
 router = APIRouter()
@@ -43,26 +47,81 @@ async def healthz() -> str:
 
 
 async def _ping_db() -> None:
-    async with db_session.engine.connect() as conn:
-        await conn.execute(text("SELECT 1"))
+    # A connection of its own, not from the application pool: a busy pool must not make a healthy
+    # service NotReady, and anonymous /readyz calls must not tie up pooled connections. The
+    # driver's own connect and statement timeouts bound it; nothing cancels it from outside.
+    url = db_session.engine.url
+    conn = await asyncpg.connect(
+        host=url.host, port=url.port, user=url.username, password=url.password, database=url.database,
+        timeout=READY_TIMEOUT_SECONDS, command_timeout=READY_TIMEOUT_SECONDS,
+    )
+    try:
+        await conn.fetchval("SELECT 1")
+    finally:
+        await conn.close(timeout=READY_TIMEOUT_SECONDS)
+
+
+_last_result: Optional[tuple[float, bool]] = None  # (monotonic time, ready)
+_running: Optional[asyncio.Task] = None
+
+
+async def _check() -> bool:
+    global _last_result
+    try:
+        await _ping_db()
+        ready = True
+    except Exception as e:
+        logger.warning("readiness check failed: database not reachable: %s: %s", type(e).__name__, e)
+        ready = False
+    _last_result = (time.monotonic(), ready)
+    return ready
+
+
+async def _ready() -> bool:
+    # One ping at a time per process: concurrent callers share the running ping, and a result
+    # younger than RESULT_MAX_AGE_SECONDS is reused, so public callers cannot multiply the DB load.
+    global _running
+    if _last_result is not None and time.monotonic() - _last_result[0] < RESULT_MAX_AGE_SECONDS:
+        return _last_result[1]
+    if _running is None or _running.done():
+        _running = asyncio.create_task(_check())
+    # shield: a caller that goes away does not cancel the ping the others wait for.
+    return await asyncio.shield(_running)
 
 
 @router.get("/readyz", response_class=PlainTextResponse, include_in_schema=False)
 async def readyz() -> PlainTextResponse:
-    try:
-        await asyncio.wait_for(_ping_db(), timeout=READY_TIMEOUT_SECONDS)
-    except Exception as e:
-        logger.warning("readiness check failed: database not reachable: %s: %s", type(e).__name__, e)
-        return PlainTextResponse("unavailable", status_code=503)
-    return PlainTextResponse("ok")
+    if await _ready():
+        return PlainTextResponse("ok")
+    return PlainTextResponse("unavailable", status_code=503)
+
+
+# --- access log ------------------------------------------------------------------------------------
+# uvicorn writes the access line from inside the application's send(), so a context variable set
+# by the middleware below is visible to the log filter. Only Kubernetes' own probe requests are
+# left out; any other caller of the probe paths stays in the log.
+
+_kube_probe_request: contextvars.ContextVar[bool] = contextvars.ContextVar("kube_probe_request", default=False)
+
+
+class ProbeAccessLogMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").endswith(PROBE_PATHS):
+            user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"")
+            if user_agent.startswith(b"kube-probe/"):
+                _kube_probe_request.set(True)
+        await self.app(scope, receive, send)
 
 
 class ProbeAccessLogFilter(logging.Filter):
-    """Drops uvicorn access log lines for the probe paths (one per probe period would flood the log)."""
+    """Drops uvicorn access log lines of Kubernetes probe requests (one per probe period would flood the log)."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        args = record.args
-        # uvicorn.access: (client_addr, method, full_path, http_version, status_code)
-        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
-            return args[2].split("?", 1)[0] not in PROBE_PATHS
-        return True
+        return not _kube_probe_request.get()
+
+
+# Installed once per process (this module is imported once), not per create_app().
+logging.getLogger("uvicorn.access").addFilter(ProbeAccessLogFilter())
