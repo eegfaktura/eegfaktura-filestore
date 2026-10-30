@@ -47,6 +47,11 @@ Environment variables (names only — never commit secret values):
 - `FILESTORE_LOCAL_BASE_DIR`, `FILESTORE_TEMP_DIR`
 - `JWT_KEY_FILE`, `JWT_AUDIENCE`
 - `GRAPHIQL_ENABLED` — **disable in production**
+- `LOG_LEVEL` — `trace`, `debug`, `info` (default), `warn`, `error`; an unknown value stops the start.
+  The former `APP_LOG_LEVEL` is still read when `LOG_LEVEL` is not set.
+- `LOG_FORMAT` — `json` (set in the image: one JSON object per line on stdout, ECS field names) or
+  `text` (default when run from source)
+- `SERVICE_VERSION` — `service.version` in the log (the release build passes the image version)
 
 Exposed port: **5000**. On-disk layout:
 `{FILESTORE_LOCAL_BASE_DIR}/{storage_id}/{container_id}/{file_id}` (UUIDs only).
