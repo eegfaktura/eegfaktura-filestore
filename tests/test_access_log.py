@@ -214,3 +214,47 @@ def test_the_context_survives_an_unhandled_error_for_the_traceback_line():
             return (log_context.get() or {}).get("request.id")
 
     assert asyncio.run(run()) == "req-500"
+
+
+def test_graphql_tenant_id_is_the_checked_stem_not_the_raw_argument(client, access_lines):
+    tenant = new_tenant()
+    _, headers = _personal_headers([tenant])
+    r = _graphql(client, headers, "query Q($t: String!) { files(tenant: $t) { id } }",
+                 {"t": f"{tenant}-max.muster@example.com"})
+    assert r.status_code == 200 and "errors" not in r.json()
+    (line,) = access_lines()
+    assert line["tenant.id"] == tenant
+    assert "max.muster" not in json.dumps(line).lower()
+
+
+def test_rest_tenant_id_is_the_checked_stem_not_the_path_segment(client, access_lines):
+    tenant = new_tenant()
+    _, headers = _personal_headers([tenant])
+    r = client.post(f"/filestore/upload/invoice/{tenant}-max.muster@example.com/{uuid.uuid4()}", headers=headers,
+                    files={"file": ("a.exe", b"MZ", "application/x-msdownload")})
+    assert r.status_code == 400  # rejected after the tenant check
+    (line,) = access_lines()
+    assert line["tenant.id"] == tenant
+    assert "max.muster" not in json.dumps(line).lower()
+
+
+def test_gea_sub_tenant_and_its_stored_files_are_one_tenant(client, access_lines):
+    stem = new_tenant()
+    _, headers = _personal_headers([f"{stem}-003"])
+    file_id = client.post(f"/filestore/upload/contract/{stem}-003/{uuid.uuid4()}", headers=headers,
+                          files={"file": ("v.pdf", b"%PDF-1.4", "application/pdf")}).json()["id"]
+    query = "query Q($t: String!, $id: UUID!) { a: files(tenant: $t) { id } b: file(id: $id) { id } }"
+    r = _graphql(client, headers, query, {"t": f"{stem}-003", "id": file_id})
+    assert r.status_code == 200 and "errors" not in r.json()
+    lines = access_lines()
+    assert [line["tenant.id"] for line in lines] == [stem, stem]
+
+
+def test_superuser_tenant_is_logged_only_when_tenant_shaped(client, access_lines):
+    _, headers = _personal_headers([new_tenant()], realm_access={"roles": ["superuser"]})
+    query = "query Q($t: String!) { files(tenant: $t) { id } }"
+    _graphql(client, headers, query, {"t": "rc100181-003"})
+    _graphql(client, headers, query, {"t": "max.muster@example.com"})
+    first, second = access_lines()
+    assert first["tenant.id"] == "RC100181"
+    assert "tenant.id" not in second and second["event.outcome"] == "success"
