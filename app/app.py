@@ -15,6 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+import logging
+
 from fastapi import FastAPI
 import strawberry
 from strawberry.fastapi import GraphQLRouter
@@ -23,6 +25,7 @@ from app.auth import gql_context
 from app.graphql.schemas.mutation_schema import Mutation
 from app.graphql.schemas.query_schema import Query
 from app.rest.routers import filestore
+from app import health
 from app.config import settings
 
 schema = strawberry.Schema(query=Query, mutation=Mutation, config=StrawberryConfig(auto_camel_case=True))
@@ -41,4 +44,6 @@ def create_app():
     )
     app.include_router(filestore.router, prefix=f"/{settings.HTTP_FILE_DL_ENDPOINT}")
     app.include_router(graphql_app, prefix="/graphql")
+    app.include_router(health.router)
+    logging.getLogger("uvicorn.access").addFilter(health.ProbeAccessLogFilter())
     return app
