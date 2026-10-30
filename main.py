@@ -15,8 +15,11 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+import logging
+
 import app.dependencies
 from app.config import settings
+from app.logging_config import configure_logging
 import uvicorn
 from app.app import create_app
 
@@ -24,8 +27,10 @@ from app.app import create_app
 application = create_app()
 
 if __name__ == "__main__":
+    configure_logging()
     app.dependencies.check_tmp_dir()
-    print("Starting uvicorn server...")
-    uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False)
-#                log_level=settings.APP_LOG_LEVEL, log_config='logging.yaml')
+    logging.getLogger(__name__).info("Starting uvicorn server...")
+    # log_config=None: uvicorn keeps the setup above; access_log=False: app.access_log writes the access line
+    uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False,
+                log_config=None, access_log=False)
 
