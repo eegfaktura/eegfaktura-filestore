@@ -142,34 +142,10 @@ def test_concurrent_readiness_checks_share_one_ping(monkeypatch):
     assert pings == 1
 
 
-def test_only_kube_probe_requests_are_kept_out_of_the_access_log(client, monkeypatch):
-    # TestClient does not write uvicorn's access log. The fake connect runs inside the request, as
-    # uvicorn's send() does, and records what the access-log filter decides there.
-    decisions = []
-    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, "", None, None)
-
-    async def connect(**kwargs):
-        decisions.append(app.health.ProbeAccessLogFilter().filter(record))
-        raise ConnectionRefusedError()
-
-    monkeypatch.setattr(app.health, "asyncpg", SimpleNamespace(connect=connect))
-    client.get("/readyz", headers={"User-Agent": "kube-probe/1.31"})
-    monkeypatch.setattr(app.health, "_last_result", None)
-    client.get("/readyz", headers={"User-Agent": "curl/8.0"})
-    assert decisions == [False, True]
-
-
-def _marked(path, root_path=""):
-    seen = []
-
-    async def inner(scope, receive, send):
-        seen.append(app.health._kube_probe_request.get())
-
-    mw = app.health.ProbeAccessLogMiddleware(inner)
+def _marked(path, root_path="", user_agent=b"kube-probe/1.31"):
     scope = {"type": "http", "path": path, "root_path": root_path,
-             "headers": [(b"user-agent", b"kube-probe/1.31")]}
-    asyncio.run(mw(scope, None, None))
-    return seen[0]
+             "headers": [(b"user-agent", user_agent)]}
+    return app.health.is_kube_probe(scope)
 
 
 def test_only_the_exact_probe_paths_are_marked():
@@ -178,3 +154,8 @@ def test_only_the_exact_probe_paths_are_marked():
     assert _marked("/api/readyz", root_path="/api")
     assert not _marked("/filestore/readyz")
     assert not _marked("/readyz/x")
+
+
+def test_only_kube_probe_user_agents_are_marked():
+    assert not _marked("/readyz", user_agent=b"curl/8.0")
+    assert not _marked("/readyz", user_agent=b"Mozilla/5.0 kube-probe/1.31")

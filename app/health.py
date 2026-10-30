@@ -20,7 +20,6 @@
 # or hosts in the body; the reason a readiness check fails goes to the log.
 
 import asyncio
-import contextvars
 import logging
 import time
 from typing import Optional
@@ -117,35 +116,16 @@ async def readyz() -> PlainTextResponse:
 
 
 # --- access log ------------------------------------------------------------------------------------
-# uvicorn writes the access line from inside the application's send(), so a context variable set
-# by the middleware below is visible to the log filter. Only Kubernetes' own probe requests are
-# left out; any other caller of the probe paths stays in the log.
+# Only Kubernetes' own probe requests are left out of the access log (app.access_log); any other
+# caller of the probe paths stays in the log.
 
-_kube_probe_request: contextvars.ContextVar[bool] = contextvars.ContextVar("kube_probe_request", default=False)
-
-
-class ProbeAccessLogMiddleware:
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        path = scope.get("path", "")
-        root_path = scope.get("root_path", "")
-        if root_path and path.startswith(root_path):
-            path = path[len(root_path):]
-        if scope["type"] == "http" and path in PROBE_PATHS:
-            user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"")
-            if user_agent.startswith(b"kube-probe/"):
-                _kube_probe_request.set(True)
-        await self.app(scope, receive, send)
-
-
-class ProbeAccessLogFilter(logging.Filter):
-    """Drops uvicorn access log lines of Kubernetes probe requests (one per probe period would flood the log)."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        return not _kube_probe_request.get()
-
-
-# Installed once per process (this module is imported once), not per create_app().
-logging.getLogger("uvicorn.access").addFilter(ProbeAccessLogFilter())
+def is_kube_probe(scope) -> bool:
+    """True for a Kubernetes probe request (User-Agent kube-probe/...) to exactly /healthz or /readyz."""
+    path = scope.get("path", "")
+    root_path = scope.get("root_path", "")
+    if root_path and path.startswith(root_path):
+        path = path[len(root_path):]
+    if scope["type"] != "http" or path not in PROBE_PATHS:
+        return False
+    user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"")
+    return user_agent.startswith(b"kube-probe/")
