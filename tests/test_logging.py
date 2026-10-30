@@ -191,3 +191,10 @@ def test_warnings_go_through_the_logging_setup():
     docs = [json.loads(line) for line in r.stdout.splitlines()]
     assert docs[-1]["log.logger"] == "py.warnings" and "careful" in docs[-1]["message"]
     assert r.stderr == ""
+
+
+def test_an_empty_log_level_falls_back_to_app_log_level():
+    r = _run("from app.config import settings; print(settings.LOG_LEVEL, settings.LOG_FORMAT)",
+             LOG_LEVEL="", APP_LOG_LEVEL="debug", LOG_FORMAT="")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.split() == ["debug", "text"]
