@@ -43,7 +43,7 @@ FORMATS = ("json", "text")
 CONTEXT_FIELDS = ("request.id", "trace.id", "span.id", "tenant.id", "client.id", "graphql.operation.name")
 # Fields a log call may pass in `extra`.
 EXTRA_FIELDS = ("event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
-                "http.response.status_code")
+                "http.response.status_code", "error.type", "error.stack_trace", "graphql.error.path")
 
 log_context: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("log_context", default=None)
 

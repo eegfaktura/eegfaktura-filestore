@@ -15,7 +15,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-from fastapi import FastAPI
+import logging
+import traceback
+
+from fastapi import FastAPI, HTTPException
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from strawberry.schema.config import StrawberryConfig
@@ -27,8 +30,26 @@ from app import health
 from app.access_log import AccessLogMiddleware, GraphQLOperationName
 from app.config import settings
 
-schema = strawberry.Schema(query=Query, mutation=Mutation, config=StrawberryConfig(auto_camel_case=True),
-                           extensions=[GraphQLOperationName])
+_graphql_logger = logging.getLogger("strawberry.execution")
+
+
+class Schema(strawberry.Schema):
+    def process_errors(self, errors, execution_context=None):
+        # Only the error class, the result path and, for unexpected errors, the stack frames (code
+        # lines only) — not the error text (eegfaktura-dev tracking filestore 261030-mm1).
+        for error in errors:
+            original = error.original_error
+            expected = isinstance(original, HTTPException) and original.status_code < 500
+            _graphql_logger.log(logging.WARNING if expected else logging.ERROR, "GraphQL error", extra={
+                "error.type": type(original or error).__name__,
+                "graphql.error.path": ".".join(str(p) for p in error.path or []) or None,
+                "error.stack_trace": None if expected or original is None
+                else "".join(traceback.format_tb(original.__traceback__)),
+            })
+
+
+schema = Schema(query=Query, mutation=Mutation, config=StrawberryConfig(auto_camel_case=True),
+                extensions=[GraphQLOperationName])
 
 
 def create_app():

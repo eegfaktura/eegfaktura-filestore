@@ -258,3 +258,25 @@ def test_superuser_tenant_is_logged_only_when_tenant_shaped(client, access_lines
     first, second = access_lines()
     assert first["tenant.id"] == "RC100181"
     assert "tenant.id" not in second and second["event.outcome"] == "success"
+
+
+def test_graphql_errors_are_logged_without_query_text_or_values(client):
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(JsonFormatter())
+    logger = logging.getLogger("strawberry.execution")
+    logger.addHandler(handler)
+    user_id = str(uuid.uuid4())
+    try:
+        _, headers = _personal_headers([new_tenant()])
+        query = '{ invoices(tenant: "%s", userId: "%s") { id } }' % (new_tenant(), user_id)
+        r = client.post("/graphql", headers=headers, json={"query": query})
+        assert r.status_code == 200 and "Tenant not allowed" in r.text
+    finally:
+        logger.removeHandler(handler)
+    raw = stream.getvalue()
+    (line,) = [json.loads(x) for x in raw.splitlines()]
+    assert line["log.level"] == "warn"
+    assert line["error.type"] == "HTTPException"
+    assert line["graphql.error.path"] == "invoices"
+    assert user_id not in raw and "invoices(" not in raw and "Tenant not allowed" not in raw
