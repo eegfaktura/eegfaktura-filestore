@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
+import logging
 import os.path
 import typing
 import uuid
@@ -22,16 +23,19 @@ import app.dependencies
 from app.file_metadata import allowed_media_types, allowed_file_categories
 from fastapi import UploadFile
 from sqlalchemy import select, delete
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import load_only, selectinload, contains_eager
 
 from app.auth import base_tenant
 from app.config import settings
 
 from app.db.session import get_session
-from app.dependencies import get_valid_data, upload_file, move_file, get_absolute_url
+from app.dependencies import get_valid_data, upload_file, move_file, get_absolute_url, discard_files
 from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, AddFile, AddFileError, DeleteFile, DeleteFileError
+
+logger = logging.getLogger(__name__)
 
 
 async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], category: str, user_id: uuid.UUID,
@@ -165,11 +169,20 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
         if file_category not in allowed_file_categories:
             return AddFileError(message="Invalid file category")
 
-        # Do not allow to override default attributes; checked before anything is written (the
+        # Do not allow to override default attributes, and only attributes the table takes (key unique
+        # per file, up to 128 characters, a value up to 512); checked before anything is written (the
         # upload would otherwise leave its temporary file behind)
+        if name is not None and len(name) > 128:
+            return AddFileError(message="Invalid name: up to 128 characters")
+        keys = set()
         for attribute in attributes or []:
             if attribute.key in (['orig_file_name', 'file_extension', 'media_type', 'file_bytes']):
                 return AddFileError(message=f"Forbidden Attribute \"{attribute.key}\"")
+            if len(attribute.key) > 128 or attribute.value is None or len(attribute.value) > 512:
+                return AddFileError(message="Invalid Attribute: key up to 128, value up to 512 characters")
+            if attribute.key in keys:
+                return AddFileError(message=f"Duplicate Attribute \"{attribute.key}\"")
+            keys.add(attribute.key)
 
         async with get_session() as s:
             sql_file_category = select(file_category_model.FileCategory) \
@@ -226,27 +239,39 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
             await s.flush()
 
             tmpfilename = f"{settings.FILESTORE_TEMP_DIR}/{str(db_file.id)}"
-            await upload_file(file, tmpfilename)
-
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="orig_file_name",
-                                                     value=os.path.splitext(file.filename)[0]))
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension",
-                                                     value=os.path.splitext(file.filename)[1][1:]))
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
-
-            # Add extra attributes if set (the forbidden keys are rejected above)
-            if attributes is not None:
-                for attribute in attributes:
-                    s.add(
-                        file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
-
             targetfile = f"{settings.FILESTORE_LOCAL_BASE_DIR}/{str_storage_id}/{str_container_id}/{str(db_file.id)}"
-            move_file(tmpfilename, targetfile)
+            try:
+                await upload_file(file, tmpfilename)
 
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
-                                                     value=str(os.path.getsize(targetfile))))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="orig_file_name",
+                                                         value=os.path.splitext(file.filename)[0]))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension",
+                                                         value=os.path.splitext(file.filename)[1][1:]))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
 
-            await s.commit()
+                # Add extra attributes if set (the forbidden keys are rejected above)
+                if attributes is not None:
+                    for attribute in attributes:
+                        s.add(
+                            file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
+
+                move_file(tmpfilename, targetfile)
+
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
+                                                         value=str(os.path.getsize(targetfile))))
+
+            except BaseException:
+                # Nothing is committed yet: leave nothing on disk
+                discard_files(tmpfilename, targetfile)
+                raise
+            try:
+                await s.commit()
+            except DBAPIError as e:
+                # The database refused the rows (the connection is still valid), so no row refers to the file. A lost
+                # connection or any other failure here may still have committed: the file then stays, an orphan at worst
+                if not e.connection_invalidated:
+                    discard_files(tmpfilename, targetfile)
+                raise
 
         file_dict = db_file.as_dict()
         file_dict["file_category"] = file_category
@@ -342,7 +367,13 @@ async def delete_file(info, id: uuid.UUID):
         (await s.delete(file))
         (await s.commit())
 
-    # Delete file from Filesystem
-    app.dependencies.delete_file(f"{settings.FILESTORE_LOCAL_BASE_DIR}/{storage.id}/{file.file_container_id}/{file.id}")
+    # Delete file from Filesystem. The row is gone already: a file that is missing on disk counts as deleted and is
+    # logged (ids only); any other error (e.g. no permission) is still reported to the client
+    try:
+        app.dependencies.delete_file(
+            f"{settings.FILESTORE_LOCAL_BASE_DIR}/{storage.id}/{file.file_container_id}/{file.id}")
+    except FileNotFoundError as e:
+        logger.warning("deleteFile: file %s (storage %s, container %s) not removed from disk: %s",
+                       file.id, storage.id, file.file_container_id, type(e).__name__)
 
     return DeleteFile(id=file.id)

@@ -14,6 +14,11 @@ this changelog highlights the changes relevant for overview and operations.
   the push credentials. Now every action is pinned to a commit, the same SHAs `pr-checks.yml` and `security-scan.yml` already
   use where the action is the same, otherwise the commit the floating tag pointed to on 2026-10-28.
 
+### Fixed
+- **JWT key file** (eegfaktura-dev tracking filestore 16): security relevant — details not published.
+- **A failed upload no longer leaves its file on disk** (eegfaktura-dev tracking filestore 261005-ca1). GraphQL `addFile` rejects duplicate attribute keys, keys over 128 and values over 512 characters (or without a value) with an `AddFileError` before anything is written; formerly the database refused them at the commit, after the file had been moved into place. When the commit of an upload fails anyway (REST or GraphQL, e.g. a file extension over 512 characters), the stored and the temporary file are removed.
+- **`deleteFile` no longer fails after the row is gone** (eegfaktura-dev tracking filestore 3). The row is deleted first; when the file is already missing on disk afterwards, the mutation now answers `DeleteFile` instead of an error and logs it with ids only. Any other error removing the file is still reported.
+
 ## [1.0.9] – 2026-10-28
 
 ### Security

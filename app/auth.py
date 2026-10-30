@@ -19,6 +19,9 @@ import logging
 from typing import List, Optional
 
 import jwt
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, ConfigDict
@@ -29,11 +32,34 @@ logger = logging.getLogger(__name__)
 
 
 def _load_public_key() -> str:
-    with open(settings.JWT_PUBLIC_KEY_FILE, "r") as f:
-        return f.read()
+    """Read the RS256 verification key from JWT_KEY_FILE.
+
+    The file holds either a bare public key (BEGIN PUBLIC KEY) or an X.509 certificate (BEGIN
+    CERTIFICATE, the realm certificate other components read); from a certificate the public key is
+    extracted. Returns the RSA public key as PEM. Anything else stops the start with a clear message.
+    """
+    with open(settings.JWT_PUBLIC_KEY_FILE, "rb") as f:
+        data = f.read()
+    try:
+        if b"-----BEGIN CERTIFICATE-----" in data:
+            key = x509.load_pem_x509_certificate(data).public_key()
+        else:
+            key = serialization.load_pem_public_key(data)
+    except ValueError as e:
+        raise RuntimeError(
+            f"JWT_KEY_FILE {settings.JWT_PUBLIC_KEY_FILE}: neither a PEM public key nor a PEM certificate"
+        ) from e
+    if not isinstance(key, rsa.RSAPublicKey):
+        raise RuntimeError(
+            f"JWT_KEY_FILE {settings.JWT_PUBLIC_KEY_FILE}: not an RSA key (RS256 needs one), "
+            f"got {type(key).__name__}"
+        )
+    return key.public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
 
 
-# Loaded once at import time. Fails fast if the key file is missing or unreadable.
+# Loaded once at import time. Fails fast if the key file is missing, unreadable or no RSA key.
 _PUBLIC_KEY: str = _load_public_key()
 
 _bearer = HTTPBearer(auto_error=True)

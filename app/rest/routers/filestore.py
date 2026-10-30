@@ -23,13 +23,15 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import selectinload
 from starlette.responses import JSONResponse
 
 from app.auth import Claims, get_claims, base_tenant
 from app.config import settings
 from app.db.session import get_session
-from app.dependencies import get_file_download_metadata, upload_file, move_file, get_file_download_uri
+from app.dependencies import get_file_download_metadata, upload_file, move_file, get_file_download_uri, \
+    discard_files
 from app.file_metadata import allowed_media_types
 from app.models import file_category_model, file_container_model, storage_model, file_model, file_attribute_model
 
@@ -216,21 +218,33 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
             await s.flush()
 
             tmpfilename = f"{settings.FILESTORE_TEMP_DIR}/{str(db_file.id)}"
-            await upload_file(file, tmpfilename)
-
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="orig_file_name",
-                                                     value=os.path.splitext(file.filename)[0]))
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension",
-                                                     value=os.path.splitext(file.filename)[1][1:]))
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
-
             targetfile = f"{settings.FILESTORE_LOCAL_BASE_DIR}/{str_storage_id}/{str_container_id}/{str(db_file.id)}"
-            move_file(tmpfilename, targetfile)
+            try:
+                await upload_file(file, tmpfilename)
 
-            s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
-                                                     value=str(os.path.getsize(targetfile))))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="orig_file_name",
+                                                         value=os.path.splitext(file.filename)[0]))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension",
+                                                         value=os.path.splitext(file.filename)[1][1:]))
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
 
-            await s.commit()
+                move_file(tmpfilename, targetfile)
+
+                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
+                                                         value=str(os.path.getsize(targetfile))))
+
+            except BaseException:
+                # Nothing is committed yet: leave nothing on disk
+                discard_files(tmpfilename, targetfile)
+                raise
+            try:
+                await s.commit()
+            except DBAPIError as e:
+                # The database refused the rows (the connection is still valid), so no row refers to the file. A lost
+                # connection or any other failure here may still have committed: the file then stays, an orphan at worst
+                if not e.connection_invalidated:
+                    discard_files(tmpfilename, targetfile)
+                raise
 
         file_dict = db_file.as_dict()
         file_dict["file_category"] = file_category
