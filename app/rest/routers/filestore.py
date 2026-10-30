@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
+import logging
 import os.path
 import urllib
 
@@ -37,6 +38,8 @@ from app.models import file_category_model, file_container_model, storage_model,
 
 from app.rest.models.default import ErrorMessage
 from app.rest.models.file_model import FileCategoryEnum, FileUploadResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -110,8 +113,7 @@ async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)
     if not os.path.isfile(
             settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
                 metadata["file_container_id"]) + "/" + str(file_id)):
-        # TODO Logging
-        print(settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
+        logger.warning("download: file missing on disk: %s", settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
             metadata["file_container_id"]) + "/" + str(file_id))
         raise HTTPException(status_code=404, detail="File not found 8")
 

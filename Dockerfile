@@ -58,7 +58,8 @@ RUN groupadd -r app --gid 1000 \
     && chown -R app:app /vfeeg-filestore
 USER app
 
-ENV APP_LOG_LEVEL="debug"
+# One JSON object per log line on stdout (LOG_LEVEL defaults to info)
+ENV LOG_FORMAT="json"
 ENV DB_HOSTNAME="postgres"
 ENV DB_USERNAME="postgres"
 ENV DB_DATABASE="eegfaktura"
@@ -68,6 +69,10 @@ ENV HTTP_HOSTNAME="0.0.0.0"
 ENV HTTP_PORT=5000
 ENV HTTP_FILE_DL_ENDPOINT="filestore"
 ENV FILESTORE_LOCAL_BASE_DIR="/eegfaktura-filestore-data"
+
+# service.version in the log; the release workflow passes the image version
+ARG SERVICE_VERSION=dev
+ENV SERVICE_VERSION=${SERVICE_VERSION}
 
 EXPOSE ${HTTP_PORT}
 

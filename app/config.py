@@ -17,13 +17,20 @@
 
 import os
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # a variable set but empty counts as not set (the defaults below and the APP_LOG_LEVEL fallback apply)
+    model_config = SettingsConfigDict(env_ignore_empty=True)
+
     APP_TITLE: str = "eegFaktura Filestore"
     APP_VERSION: str = "0.1.0"
-    APP_LOG_LEVEL: str = "info"
+    # LOG_LEVEL: trace, debug, info, warn, error; the former APP_LOG_LEVEL is still read when LOG_LEVEL is not set
+    LOG_LEVEL: str = os.environ.get("LOG_LEVEL") or os.environ.get("APP_LOG_LEVEL") or "info"
+    # LOG_FORMAT: json (the image sets it) or text (default when run from source)
+    LOG_FORMAT: str = os.environ.get("LOG_FORMAT") or "text"
+    SERVICE_VERSION: str = os.environ.get("SERVICE_VERSION", "dev")
     #Load Database config from ENV
     DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
     DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")

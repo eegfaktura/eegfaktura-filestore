@@ -16,6 +16,7 @@
 #
 
 import logging
+import re
 from typing import List, Optional
 
 import jwt
@@ -27,6 +28,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.config import settings
+from app.logging_config import current_log_context, record_tenant_check
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,9 @@ _PUBLIC_KEY: str = _load_public_key()
 
 _bearer = HTTPBearer(auto_error=True)
 
+# Tenant ids as the communities have them (RC100181, GC106668, CC100613, TE100200): for the log only.
+_TENANT_ID = re.compile(r"[A-Z]{2}[0-9]{6}")
+
 
 def base_tenant(tenant: str) -> str:
     """Map a tenant id to the stem tenant used for document storage.
@@ -82,6 +87,8 @@ class Claims(BaseModel):
     tenants: List[str] = Field(default_factory=list, alias="tenant")
     preferred_username: Optional[str] = None
     realm_access: dict = Field(default_factory=dict)
+    # the Keycloak client the token was issued to (the integration, not a person): client.id in the log
+    azp: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -96,10 +103,14 @@ class Claims(BaseModel):
         return "superuser" in self.roles
 
     def assert_tenant(self, tenant: str) -> None:
-        if self.is_superuser():
-            return
         wanted = base_tenant(tenant).upper()
+        # the request's log context (app.access_log): the checked stem as tenant.id, or "refused".
+        # A superuser's argument is not checked against the token, so only a tenant-shaped value is kept.
+        if self.is_superuser():
+            record_tenant_check(wanted if _TENANT_ID.fullmatch(wanted) else None, True)
+            return
         allowed = {base_tenant(t).upper() for t in self.tenants}
+        record_tenant_check(wanted, wanted in allowed)
         if wanted not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -124,7 +135,10 @@ def get_claims(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from e
-    return Claims(**payload)
+    claims = Claims(**payload)
+    if claims.azp:
+        current_log_context()["client.id"] = claims.azp
+    return claims
 
 
 async def gql_context(
