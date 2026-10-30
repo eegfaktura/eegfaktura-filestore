@@ -24,6 +24,7 @@ import logging
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.health
 
@@ -33,6 +34,7 @@ def fresh_readiness_state(monkeypatch):
     # No result of an earlier test may be reused (results younger than 1 s are shared).
     monkeypatch.setattr(app.health, "_last_result", None)
     monkeypatch.setattr(app.health, "_running", None)
+    monkeypatch.setattr(app.health, "_last_saturation_warning", None)
 
 
 def test_healthz_without_token_is_200_ok(client):
@@ -63,9 +65,60 @@ def test_readyz_is_503_when_the_database_refuses_the_connection(client, monkeypa
     assert r.text == "unavailable"
     assert "readiness check failed" in caplog.text
     assert "ConnectionRefusedError" in caplog.text
+    # Same connect arguments as the application engine (host, port, user, database, URL query).
+    assert seen["host"] == app.health.db_session.engine.url.host
+    assert seen["database"] == app.health.db_session.engine.url.database
     # The driver's own timeouts bound the ping (no cancel from outside).
     assert 0 < seen["timeout"] <= 2
     assert 0 < seen["command_timeout"] <= 2
+
+
+def test_readyz_stays_200_when_postgres_has_no_free_connection(client, monkeypatch, caplog):
+    # SQLSTATE 53300 (too_many_connections) on the ping's own connection: the application pool still
+    # holds its connections, so the service stays ready; the warning is rate-limited.
+    import asyncpg
+
+    async def saturated(**kwargs):
+        raise asyncpg.TooManyConnectionsError("sorry, too many clients already")
+
+    monkeypatch.setattr(app.health, "asyncpg", SimpleNamespace(connect=saturated))
+    with caplog.at_level(logging.WARNING, logger="app.health"):
+        for _ in range(2):
+            monkeypatch.setattr(app.health, "_last_result", None)
+            r = client.get("/readyz")
+            assert r.status_code == 200
+            assert r.text == "ok"
+    assert caplog.text.count("too_many_connections") == 1
+
+
+def test_the_ping_passes_url_query_parameters_like_the_application(monkeypatch):
+    seen = {}
+
+    async def connect(**kwargs):
+        seen.update(kwargs)
+        raise ConnectionRefusedError()
+
+    engine = create_async_engine("postgresql+asyncpg://u:p@db.example:6543/d?ssl=require")
+    try:
+        monkeypatch.setattr(app.health.db_session, "engine", engine)
+        monkeypatch.setattr(app.health, "asyncpg", SimpleNamespace(connect=connect))
+        assert asyncio.run(app.health._ready()) is False
+    finally:
+        asyncio.run(engine.dispose())
+    assert seen["host"] == "db.example"
+    assert seen["port"] == 6543
+    assert seen["ssl"] == "require"
+    assert seen["timeout"] == seen["command_timeout"] == app.health.READY_TIMEOUT_SECONDS
+
+
+def test_a_timeout_is_logged_with_its_type(client, monkeypatch, caplog):
+    async def times_out(**kwargs):
+        raise TimeoutError()
+
+    monkeypatch.setattr(app.health, "asyncpg", SimpleNamespace(connect=times_out))
+    with caplog.at_level(logging.WARNING, logger="app.health"):
+        assert client.get("/readyz").status_code == 503
+    assert "TimeoutError" in caplog.text
 
 
 def test_concurrent_readiness_checks_share_one_ping(monkeypatch):
@@ -104,3 +157,24 @@ def test_only_kube_probe_requests_are_kept_out_of_the_access_log(client, monkeyp
     monkeypatch.setattr(app.health, "_last_result", None)
     client.get("/readyz", headers={"User-Agent": "curl/8.0"})
     assert decisions == [False, True]
+
+
+def _marked(path, root_path=""):
+    seen = []
+
+    async def inner(scope, receive, send):
+        seen.append(app.health._kube_probe_request.get())
+
+    mw = app.health.ProbeAccessLogMiddleware(inner)
+    scope = {"type": "http", "path": path, "root_path": root_path,
+             "headers": [(b"user-agent", b"kube-probe/1.31")]}
+    asyncio.run(mw(scope, None, None))
+    return seen[0]
+
+
+def test_only_the_exact_probe_paths_are_marked():
+    assert _marked("/healthz")
+    assert _marked("/readyz")
+    assert _marked("/api/readyz", root_path="/api")
+    assert not _marked("/filestore/readyz")
+    assert not _marked("/readyz/x")

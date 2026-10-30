@@ -50,10 +50,15 @@ async def _ping_db() -> None:
     # A connection of its own, not from the application pool: a busy pool must not make a healthy
     # service NotReady, and anonymous /readyz calls must not tie up pooled connections. The
     # driver's own connect and statement timeouts bound it; nothing cancels it from outside.
-    url = db_session.engine.url
+    # The connect arguments come from the application engine's dialect, so URL query parameters
+    # (e.g. ssl) reach the ping like the application; the two keys SQLAlchemy's adapter consumes
+    # itself are not asyncpg.connect arguments.
+    engine = db_session.engine
+    cargs, cparams = engine.dialect.create_connect_args(engine.url)
+    cparams.pop("prepared_statement_cache_size", None)
+    cparams.pop("prepared_statement_name_func", None)
     conn = await asyncpg.connect(
-        host=url.host, port=url.port, user=url.username, password=url.password, database=url.database,
-        timeout=READY_TIMEOUT_SECONDS, command_timeout=READY_TIMEOUT_SECONDS,
+        *cargs, **cparams, timeout=READY_TIMEOUT_SECONDS, command_timeout=READY_TIMEOUT_SECONDS,
     )
     try:
         await conn.fetchval("SELECT 1")
@@ -65,14 +70,29 @@ _last_result: Optional[tuple[float, bool]] = None  # (monotonic time, ready)
 _running: Optional[asyncio.Task] = None
 
 
+TOO_MANY_CONNECTIONS = "53300"
+SATURATION_WARN_INTERVAL_SECONDS = 60.0
+_last_saturation_warning: Optional[float] = None
+
+
 async def _check() -> bool:
-    global _last_result
+    global _last_result, _last_saturation_warning
     try:
         await _ping_db()
         ready = True
     except Exception as e:
-        logger.warning("readiness check failed: database not reachable: %s: %s", type(e).__name__, e)
-        ready = False
+        if getattr(e, "sqlstate", None) == TOO_MANY_CONNECTIONS:
+            # Postgres has no free connection for the ping, but the application's pool still holds
+            # its own: stay ready, so a saturated shared Postgres does not become a full outage.
+            now = time.monotonic()
+            if _last_saturation_warning is None or now - _last_saturation_warning >= SATURATION_WARN_INTERVAL_SECONDS:
+                _last_saturation_warning = now
+                logger.warning("readiness check: database has no free connection (too_many_connections); "
+                               "staying ready, the application pool can still serve")
+            ready = True
+        else:
+            logger.warning("readiness check failed: database not reachable: %r", e)
+            ready = False
     _last_result = (time.monotonic(), ready)
     return ready
 
@@ -109,7 +129,11 @@ class ProbeAccessLogMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope.get("path", "").endswith(PROBE_PATHS):
+        path = scope.get("path", "")
+        root_path = scope.get("root_path", "")
+        if root_path and path.startswith(root_path):
+            path = path[len(root_path):]
+        if scope["type"] == "http" and path in PROBE_PATHS:
             user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"")
             if user_agent.startswith(b"kube-probe/"):
                 _kube_probe_request.set(True)

@@ -9,7 +9,7 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Added
-- **Health endpoints for Kubernetes probes:** `GET /healthz` (liveness, always `200 ok`, no dependency checks) and `GET /readyz` (readiness: `SELECT 1` on a database connection of its own, not from the application pool, with 2 s connect and statement timeouts; one ping at a time, concurrent calls and calls within 1 s share its result; `200 ok`, otherwise `503 unavailable`, reason logged at warn level). Plain text, without a bearer token (the documented exception), on the HTTP port (5000); requests of Kubernetes probes (User-Agent `kube-probe/…`) are left out of the access log.
+- **Health endpoints for Kubernetes probes:** `GET /healthz` (liveness, always `200 ok`, no dependency checks) and `GET /readyz` (readiness: `SELECT 1` on a database connection of its own, not from the application pool, with 2 s connect and statement timeouts; one ping at a time, concurrent calls and calls within 1 s share its result; `200 ok`, otherwise `503 unavailable`, reason logged at warn level; Postgres refusing the ping with `too_many_connections` (53300) counts as ready, since the application pool still serves). Plain text, without a bearer token (the documented exception), on the HTTP port (5000); requests of Kubernetes probes (User-Agent `kube-probe/…`) are left out of the access log.
 
 ### Security
 - **CI: the release workflow pins its actions by commit SHA** (eegfaktura-dev tracking W-261028-mm6). `rolling-release.yml`
