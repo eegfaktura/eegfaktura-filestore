@@ -51,7 +51,8 @@ Environment variables (names only — never commit secret values):
   The former `APP_LOG_LEVEL` is still read when `LOG_LEVEL` is not set.
 - `LOG_FORMAT` — `json` (set in the image: one JSON object per line on stdout, ECS field names) or
   `text` (default when run from source)
-- `SERVICE_VERSION` — `service.version` in the log (the release build passes the image version)
+- `SERVICE_VERSION` — `service.version` in the log (the release build passes the commit, or the version for a `v*` tag;
+  a promoted prod/pilot image keeps its commit, its release version is the image tag)
 
 Exposed port: **5000**. On-disk layout:
 `{FILESTORE_LOCAL_BASE_DIR}/{storage_id}/{container_id}/{file_id}` (UUIDs only).
