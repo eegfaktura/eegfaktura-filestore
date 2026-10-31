@@ -70,7 +70,7 @@ ENV HTTP_PORT=5000
 ENV HTTP_FILE_DL_ENDPOINT="filestore"
 ENV FILESTORE_LOCAL_BASE_DIR="/eegfaktura-filestore-data"
 
-# service.version in the log; the release workflow passes the image version
+# service.version in the log; the release workflow passes the commit (the version for a tag build)
 ARG SERVICE_VERSION=dev
 ENV SERVICE_VERSION=${SERVICE_VERSION}
 
