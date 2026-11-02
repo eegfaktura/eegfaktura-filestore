@@ -124,7 +124,7 @@ def test_text_line_quotes_values_with_spaces():
 
 
 def _run(code, **env):
-    own = ("LOG_LEVEL", "APP_LOG_LEVEL", "LOG_FORMAT", "SERVICE_VERSION")
+    own = ("LOG_LEVEL", "APP_LOG_LEVEL", "LOG_FORMAT", "SERVICE_VERSION", "DEPLOYMENT_ENVIRONMENT")
     full_env = {k: v for k, v in os.environ.items() if k not in own}
     full_env.update(env)
     return subprocess.run([sys.executable, "-c", code], cwd=REPO, env=full_env,
@@ -228,3 +228,37 @@ def test_every_engine_hides_sql_parameters():
     assert db_session.engine.sync_engine.hide_parameters is True
     with open(os.path.join(REPO, "alembic", "env.py"), encoding="utf-8") as f:
         assert "hide_parameters=True" in f.read()
+
+
+_START = ("import runpy, uvicorn; uvicorn.run = lambda *args, **kwargs: None; "
+          "runpy.run_path('main.py', run_name='__main__')")
+
+
+@pytest.mark.parametrize("level,effective", [("info", "info"), ("warning", "warn"), ("error", "error")])
+def test_one_start_up_line_with_version_and_effective_level(level, effective):
+    r = _run(_START, LOG_FORMAT="json", LOG_LEVEL=level, SERVICE_VERSION="9.9.9", DB_PASSWORD="db-secret-value")
+    assert r.returncode == 0, r.stderr
+    starts = [d for d in map(json.loads, r.stdout.splitlines()) if d.get("event.action") == "service.start"]
+    assert len(starts) == 1
+    assert starts[0]["log.level"] == "info"
+    assert starts[0]["service.version"] == "9.9.9"
+    assert starts[0]["message"] == f"service start: version 9.9.9, log level {effective}"
+    assert "db-secret-value" not in r.stdout + r.stderr
+
+
+def test_deployment_environment_is_on_every_line():
+    r = _run(_SETUP, LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT="pilot")
+    assert r.returncode == 0, r.stderr
+    assert [json.loads(line)["deployment.environment"] for line in r.stdout.splitlines()] == ["pilot", "pilot"]
+
+
+@pytest.mark.parametrize("env", [{}, {"DEPLOYMENT_ENVIRONMENT": ""}], ids=["unset", "empty"])
+def test_deployment_environment_is_left_out_when_not_set(env):
+    r = _run(_SETUP, LOG_FORMAT="json", **env)
+    assert r.returncode == 0, r.stderr
+    assert not any("deployment.environment" in json.loads(line) for line in r.stdout.splitlines())
+
+
+def test_text_line_has_the_deployment_environment():
+    line = TextFormatter(deployment_environment="dev").format(_record())
+    assert re.match(r"\d{4}-.*Z info  app.test: hello world deployment.environment=dev$", line)

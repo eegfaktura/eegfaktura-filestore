@@ -53,6 +53,8 @@ Environment variables (names only — never commit secret values):
   `text` (default when run from source)
 - `SERVICE_VERSION` — `service.version` in the log (the release build passes the commit, or the version for a `v*` tag;
   a promoted prod/pilot image keeps its commit, its release version is the image tag)
+- `DEPLOYMENT_ENVIRONMENT` — `deployment.environment` on every log line (`local`, `dev`, `pilot`, `prod`); the field is
+  left out when not set
 
 Exposed port: **5000**. On-disk layout:
 `{FILESTORE_LOCAL_BASE_DIR}/{storage_id}/{container_id}/{file_id}` (UUIDs only).

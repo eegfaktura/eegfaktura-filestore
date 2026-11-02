@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # LOG_FORMAT: json (the image sets it) or text (default when run from source)
     LOG_FORMAT: str = os.environ.get("LOG_FORMAT") or "text"
     SERVICE_VERSION: str = os.environ.get("SERVICE_VERSION", "dev")
+    # deployment.environment on every log line (local, dev, pilot, prod); the field is left out when not set
+    DEPLOYMENT_ENVIRONMENT: str = os.environ.get("DEPLOYMENT_ENVIRONMENT", "")
     #Load Database config from ENV
     DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
     DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")
