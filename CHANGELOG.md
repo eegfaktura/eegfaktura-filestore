@@ -8,6 +8,10 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **Base image `python:3.13-slim-trixie`** instead of `-bookworm`: removes CVE-2023-45853 (zlib) and CVE-2025-7458
+  (sqlite), neither of which has a fix in bookworm. libpq moves from 15 to 17; the database server is unchanged.
+
 ## [1.1.0] – 2026-10-31
 
 ### Added
