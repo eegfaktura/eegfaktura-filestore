@@ -42,7 +42,7 @@ FORMATS = ("json", "text")
 # Per-request fields, set by the access-log middleware and the token check; on every line of the request.
 CONTEXT_FIELDS = ("request.id", "trace.id", "span.id", "tenant.id", "client.id", "graphql.operation.name")
 # Fields a log call may pass in `extra`.
-EXTRA_FIELDS = ("event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
+EXTRA_FIELDS = ("log.effective_level", "event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
                 "http.response.status_code", "error.type", "error.stack_trace", "graphql.error.path")
 
 log_context: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("log_context", default=None)
@@ -201,7 +201,8 @@ def log_service_start() -> None:
     """The one start-up line: version and effective log level. Written at info whatever LOG_LEVEL says,
     so that every deployment shows since when it runs and how; nothing from the settings but these."""
     logger = logging.getLogger("app.start")
+    level = _level_name(logger.getEffectiveLevel())
     logger.handle(logger.makeRecord(
         logger.name, logging.INFO, __file__, 0, "service start: version %s, log level %s",
-        (settings.SERVICE_VERSION, _level_name(logger.getEffectiveLevel())), None,
-        extra={"event.action": "service.start"}))
+        (settings.SERVICE_VERSION, level), None,
+        extra={"event.action": "service.start", "log.effective_level": level}))
