@@ -61,8 +61,24 @@ def _is_log_call(node: ast.Call) -> bool:
             and "log" in ast.unparse(func.value).lower())
 
 
-def _sensitive(identifier: str) -> bool:
-    return identifier in SENSITIVE_EXACT or SENSITIVE.search(identifier) is not None
+def _path(node: ast.expr) -> Optional[str]:
+    # The whole access, user["id"] as user.id; None when it does not start at a plain name.
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base, leaf = _path(node.value), node.attr
+    elif isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) \
+            and isinstance(node.slice.value, str):
+        base, leaf = _path(node.value), node.slice.value
+    else:
+        return None
+    return f"{base}.{leaf}" if base else None
+
+
+def _sensitive(path: str) -> bool:
+    # Anything reached through a user is about that person, the id included (no user tracking).
+    return (path.rsplit(".", 1)[-1] in SENSITIVE_EXACT or SENSITIVE.search(path) is not None
+            or "user" in path.lower())
 
 
 def _literal(text: str) -> Iterator[str]:
@@ -70,16 +86,6 @@ def _literal(text: str) -> Iterator[str]:
         yield f"sensitive name in text: {text}"
     if REPR_FORMAT.search(text):
         yield f"repr of an object: {text}"
-
-
-def _leaf(node: ast.expr) -> Optional[str]:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
-    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
-        return str(node.slice.value)
-    return None
 
 
 def _value(node: ast.expr) -> Iterator[str]:
@@ -103,7 +109,7 @@ def _value(node: ast.expr) -> Iterator[str]:
         yield from _value(node.body)
         yield from _value(node.orelse)
     elif isinstance(node, ast.Call):
-        name = _leaf(node.func)
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
         if name in OBJECT_DUMPS:
             yield f"dump of an object: {ast.unparse(node)}"
         elif name in TRANSPARENT_CALLS and node.args:
@@ -115,10 +121,10 @@ def _value(node: ast.expr) -> Iterator[str]:
     elif isinstance(node, ast.Attribute) and node.attr == "__dict__":
         yield f"dump of an object: {ast.unparse(node)}"
     else:
-        leaf = _leaf(node)
-        if leaf is not None and _sensitive(leaf):
+        path = _path(node)
+        if path is not None and _sensitive(path):
             yield f"sensitive name: {ast.unparse(node)}"
-        elif leaf is None or not SCALAR.search(leaf):
+        elif path is None or not SCALAR.search(path.rsplit(".", 1)[-1]):
             yield f"object: {ast.unparse(node)}"
 
 
@@ -130,8 +136,10 @@ def _extra(node: ast.expr) -> Iterator[str]:
     for sub in ast.walk(node):
         if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
             yield from _literal(sub.value)
-        elif isinstance(sub, (ast.Name, ast.Attribute)) and _sensitive(_leaf(sub)):
-            yield f"sensitive name: {ast.unparse(sub)}"
+        elif isinstance(sub, (ast.Name, ast.Attribute, ast.Subscript)):
+            path = _path(sub)
+            if path is not None and _sensitive(path):
+                yield f"sensitive name: {ast.unparse(sub)}"
 
 
 def findings(source: str) -> list[tuple[int, str]]:
@@ -194,6 +202,14 @@ def test_the_scan_sees_the_source():
     'logger.error(f"login with {password}")',
     'logger.debug("got %s", access_token)',
     'logger.info("user %s", user_id)',
+    'logger.info("user %s", user.id)',
+    'logger.info("user %s", user["id"])',
+    'logger.info(f"user {user.id}")',
+    'logger.info("user %s", str(request.state.current_user.id))',
+    'logger.info("user %s", users[0].id)',
+    'logger.info("user %s", get_user().id)',
+    'logger.info("x", extra={"event.action": user.id})',
+    'logger.info("x", extra={"event.action": user["id"]})',
     'logger.info("upload %s", file.filename)',
     'logger.info("upload %s", name)',
     'logger.info("subject %s", claims.sub)',
@@ -228,6 +244,7 @@ def test_the_scan_finds(line):
     'logger.info("started")',
     'logger.warning("file %s in %s", file.id, storage.id)',
     'logger.info("file %s", file_id)',
+    'logger.info("file %s", metadata["file"].id)',
     'logger.info("file %s", str(metadata["storage_id"]))',
     'logger.warning("failed: %s", type(e).__name__)',
     'logger.info("%s %s %s", scope["method"], route or "-", status)',
