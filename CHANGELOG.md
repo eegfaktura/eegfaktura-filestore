@@ -11,6 +11,8 @@ this changelog highlights the changes relevant for overview and operations.
 ### Added
 - **Never-log test** (eegfaktura-dev#45 L11, `tests/test_never_log.py`, no new dependency): scans the source (`app/`, `main.py`, `alembic/`) and fails the suite on a log call that names personal data or secrets, uses `%r`/`!r`, or writes a value it cannot show to be a literal, an id or a class name. A legitimate exception needs an entry with its reason in the test's `ALLOWED`; two exist (PyJWT's error text, the base directory in the on-disk path).
 
+- **Tests pin the request's fields on every line of a request** (eegfaktura-dev#45 L12): `request.id` and, after a passed tenant check, `tenant.id` were already on all lines through `log_context`; the tests cover the application lines of REST and GraphQL, the GraphQL error line, the JWT refusal and the line of an unhandled error. No change in the service.
+
 ### Changed
 - **The failed readiness line names only the exception class** (eegfaktura-dev#45 L11, found by the never-log test): `readiness check failed: database not reachable: ConnectionRefusedError` instead of the exception's repr, which can carry host and database user.
 
