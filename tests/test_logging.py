@@ -24,11 +24,15 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 
 import pytest
+from sqlalchemy.exc import DBAPIError
 
 from app import logging_config
+from app.db import session as db_session
 from app.logging_config import JsonFormatter, TextFormatter, log_context, parse_format, parse_level
+from tests.conftest import auth, new_tenant
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -198,3 +202,29 @@ def test_an_empty_log_level_falls_back_to_app_log_level():
              LOG_LEVEL="", APP_LOG_LEVEL="debug", LOG_FORMAT="")
     assert r.returncode == 0, r.stderr
     assert r.stdout.split() == ["debug", "text"]
+
+
+# A file name too long for files.name fails on the row with the user id, a too long extension on the
+# attribute row with the file name; both reach the server's error line as an unhandled DBAPIError.
+@pytest.mark.parametrize("filename", ["max-muster" + "n" * 130 + ".pdf", "max-muster." + "p" * 600],
+                         ids=["file-row", "attribute-row"])
+def test_an_unhandled_db_error_on_upload_logs_no_sql_parameters(client, filename):
+    tenant = new_tenant()
+    user_id = uuid.uuid4()
+    with pytest.raises(DBAPIError) as failed:
+        client.post(f"/filestore/upload/contract/{tenant}/{user_id}", headers=auth([tenant]),
+                    files={"file": (filename, b"%PDF-1.4", "application/pdf")})
+
+    doc = json.loads(JsonFormatter().format(
+        _record(level=logging.ERROR, exc_info=(failed.type, failed.value, failed.tb))))
+    assert doc["error.type"] == failed.type.__name__
+    assert "value too long" in doc["error.message"]  # the reason stays
+    for field in ("error.message", "error.stack_trace"):
+        for value in (str(user_id), user_id.hex, "max-muster", tenant):
+            assert value not in doc[field]
+
+
+def test_every_engine_hides_sql_parameters():
+    assert db_session.engine.sync_engine.hide_parameters is True
+    with open(os.path.join(REPO, "alembic", "env.py"), encoding="utf-8") as f:
+        assert "hide_parameters=True" in f.read()

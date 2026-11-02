@@ -8,6 +8,9 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Fixed
+- **No SQL parameters in the log** (eegfaktura-dev#45 L7): an unhandled database error on a REST upload or download wrote the statement's values (user id, file name) into `error.message` and `error.stack_trace`. Both SQLAlchemy engines (application, Alembic) now run with `hide_parameters=True`; the statement and the database's reason stay in the line.
+
 ## [1.1.0] – 2026-10-31
 
 ### Added
