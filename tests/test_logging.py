@@ -252,11 +252,18 @@ def test_deployment_environment_is_on_every_line():
     assert [json.loads(line)["deployment.environment"] for line in r.stdout.splitlines()] == ["pilot", "pilot"]
 
 
-@pytest.mark.parametrize("env", [{}, {"DEPLOYMENT_ENVIRONMENT": ""}], ids=["unset", "empty"])
+@pytest.mark.parametrize("env", [{}, {"DEPLOYMENT_ENVIRONMENT": ""}, {"DEPLOYMENT_ENVIRONMENT": "   "}],
+                         ids=["unset", "empty", "blank"])
 def test_deployment_environment_is_left_out_when_not_set(env):
     r = _run(_SETUP, LOG_FORMAT="json", **env)
     assert r.returncode == 0, r.stderr
     assert not any("deployment.environment" in json.loads(line) for line in r.stdout.splitlines())
+
+
+def test_deployment_environment_is_trimmed():
+    r = _run(_SETUP, LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT=" pilot ")
+    assert r.returncode == 0, r.stderr
+    assert {json.loads(line)["deployment.environment"] for line in r.stdout.splitlines()} == {"pilot"}
 
 
 def test_text_line_has_the_deployment_environment():
