@@ -12,7 +12,7 @@ for Austrian renewable energy communities (*Erneuerbare-Energiegemeinschaften*, 
 
 ## Tech stack
 
-- **Python 3.10**, **FastAPI** + **Strawberry GraphQL**
+- **Python 3.13**, **FastAPI** + **Strawberry GraphQL**
 - **SQLAlchemy 2** (async) + **asyncpg** over **PostgreSQL**; **Alembic** migrations
 - **uvicorn** (ASGI); **PyJWT** (RS256); `aiofiles`
 

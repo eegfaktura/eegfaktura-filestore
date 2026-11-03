@@ -50,7 +50,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 COPY . .
 
 # Non-root runtime user (Pod-Security-Admission "restricted" + Defense-in-Depth).
-# /eegfaktura-filestore-data wird zur Laufzeit per PVC gemounted; das Helm-Chart
+# /eegfaktura-filestore-data wird zur Laufzeit per PVC gemounted; das Deployment (Kustomize)
 # muss `fsGroup: 1000` setzen, damit der gemountete Pfad fuer `app` schreibbar ist.
 RUN groupadd -r app --gid 1000 \
     && useradd -r -g app --uid 1000 -d /vfeeg-filestore -s /sbin/nologin app \
