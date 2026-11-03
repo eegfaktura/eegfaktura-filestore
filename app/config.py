@@ -17,7 +17,7 @@
 
 import os
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,20 +27,26 @@ class Settings(BaseSettings):
 
     APP_TITLE: str = "eegFaktura Filestore"
     APP_VERSION: str = "0.1.0"
+    # The fields below up to the HTTP section are read from the environment by pydantic only (no
+    # os.environ default next to it), so a Settings() made later, e.g. in a test, sees the same rules.
     # LOG_LEVEL: trace, debug, info, warn, error; the former APP_LOG_LEVEL is still read when LOG_LEVEL is not set
-    LOG_LEVEL: str = os.environ.get("LOG_LEVEL") or os.environ.get("APP_LOG_LEVEL") or "info"
+    LOG_LEVEL: str = Field("info", validation_alias=AliasChoices("LOG_LEVEL", "APP_LOG_LEVEL"))
     # LOG_FORMAT: json (the image sets it) or text (default when run from source)
-    LOG_FORMAT: str = os.environ.get("LOG_FORMAT") or "text"
-    SERVICE_VERSION: str = os.environ.get("SERVICE_VERSION", "dev")
+    LOG_FORMAT: str = "text"
+    SERVICE_VERSION: str = "dev"
     # deployment.environment on every log line (local, dev, pilot, prod); the field is left out when not set or blank
-    DEPLOYMENT_ENVIRONMENT: str = os.environ.get("DEPLOYMENT_ENVIRONMENT", "")
+    DEPLOYMENT_ENVIRONMENT: str = ""
     #Load Database config from ENV
-    DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
-    DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")
-    DB_PASSWORD: str = os.environ.get("DB_PASSWORD", "")
-    DB_DATABASE: str = os.environ.get("DB_DATABASE", "filestore")
-    DB_PORT: int = int(os.environ.get("DB_PORT", 5432))
-    DB_DSN: str = f"postgresql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOSTNAME}:{DB_PORT}/{DB_DATABASE}"
+    DB_HOSTNAME: str = "127.0.0.1"
+    DB_USERNAME: str = "filestore"
+    DB_PASSWORD: str = ""
+    DB_DATABASE: str = "filestore"
+    DB_PORT: int = 5432
+
+    @property
+    def DB_DSN(self) -> str:
+        return f"postgresql://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOSTNAME}:{self.DB_PORT}/{self.DB_DATABASE}"
+
     #HTTP Server Vars
     HTTP_PROTOCOL: str = os.environ.get("HTTP_PROTOCOL", "http")
     HTTP_HOSTNAME: str = os.environ.get("HTTP_HOSTNAME", "localhost")

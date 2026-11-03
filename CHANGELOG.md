@@ -18,6 +18,7 @@ this changelog highlights the changes relevant for overview and operations.
 ### Changed
 - **One start-up line** (eegfaktura-dev#45 L14): `service start: version <version>, log level <effective level>` with `event.action=service.start`, at info whatever `LOG_LEVEL` says, replaces `Starting uvicorn server...` (which a level above info hid). No other setting, no secrets.
 - **The failed readiness line names only the exception class** (eegfaktura-dev#45 L11, found by the never-log test): `readiness check failed: database not reachable: ConnectionRefusedError` instead of the exception's repr, which can carry host and database user.
+- **Logging and database settings are read from the environment by pydantic only** (eegfaktura-dev#45 Q3): `LOG_LEVEL` (with the `APP_LOG_LEVEL` fallback), `LOG_FORMAT`, `SERVICE_VERSION`, `DEPLOYMENT_ENVIRONMENT` and `DB_*` no longer have `os.environ` defaults evaluated at import; `DB_DSN` is built from the `DB_*` settings and is no longer an environment variable of its own (no deployment set it). An empty `DB_PORT` now means the default 5432 instead of stopping the import. `configure_logging` takes the settings.
 
 ### Fixed
 - **No SQL parameters in the log** (eegfaktura-dev#45 L7): an unhandled database error on a REST upload or download wrote the statement's values (user id, file name) into `error.message` and `error.stack_trace`. Both SQLAlchemy engines (application, Alembic) now run with `hide_parameters=True`; the statement and the database's reason stay in the line.

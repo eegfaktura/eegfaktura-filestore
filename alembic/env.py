@@ -10,9 +10,10 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 # The service's one logging setup (LOG_LEVEL, LOG_FORMAT), not a logging section in alembic.ini.
+from app.config import settings  # noqa: E402
 from app.logging_config import configure_logging  # noqa: E402
 
-configure_logging()
+configure_logging(settings)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -21,7 +22,6 @@ configure_logging()
 
 
 from app.models import Base
-from app.config import settings
 
 target_metadata = Base.metadata
 

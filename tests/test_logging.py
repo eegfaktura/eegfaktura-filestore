@@ -16,7 +16,8 @@
 #
 
 # The logging module: level and format parsing, the JSON and text line, the field whitelist, and
-# the applied setup (in a subprocess, so the test run's own logging stays untouched).
+# the applied setup (in this process, the logging state restored afterwards; one start of main.py
+# in a subprocess).
 
 import json
 import logging
@@ -25,13 +26,16 @@ import re
 import subprocess
 import sys
 import uuid
+import warnings
 
 import pytest
 from sqlalchemy.exc import DBAPIError
 
 from app import logging_config
 from app.db import session as db_session
-from app.logging_config import JsonFormatter, TextFormatter, log_context, parse_format, parse_level
+from app.config import Settings
+from app.logging_config import (JsonFormatter, TextFormatter, configure_logging, dict_config, log_context,
+                                log_service_start, parse_format, parse_level)
 from tests.conftest import auth, new_tenant
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -123,44 +127,76 @@ def test_text_line_quotes_values_with_spaces():
     assert re.match(r"\d{4}-.*Z info  app.test: hello world request.id=r1 tenant.id=\"RC 1\"$", line)
 
 
-def _run(code, **env):
-    own = ("LOG_LEVEL", "APP_LOG_LEVEL", "LOG_FORMAT", "SERVICE_VERSION", "DEPLOYMENT_ENVIRONMENT")
-    full_env = {k: v for k, v in os.environ.items() if k not in own}
-    full_env.update(env)
-    return subprocess.run([sys.executable, "-c", code], cwd=REPO, env=full_env,
-                          capture_output=True, text=True, timeout=60)
+OWN_ENV = ("LOG_LEVEL", "APP_LOG_LEVEL", "LOG_FORMAT", "SERVICE_VERSION", "DEPLOYMENT_ENVIRONMENT")
 
 
-_SETUP = ("import logging; from app.logging_config import configure_logging; configure_logging(); "
-          "logging.getLogger('uvicorn.error').info('started'); "
-          "logging.getLogger('uvicorn.access').info('127.0.0.1 GET /x?q=1'); "
-          "logging.getLogger('app.x').debug('dbg'); logging.getLogger('app.x').info('app line')")
+@pytest.fixture
+def setup_from_env(monkeypatch, capsys):
+    """Applies the logging setup in this process from the given environment (read by Settings as at
+    start) and returns the settings; the lines go to the captured stdout. Afterwards the loggers the
+    setup touches, the warnings capture and sys.excepthook are as before."""
+    loggers = [logging.getLogger(), *map(logging.getLogger, dict_config(logging.INFO, "text", "")["loggers"])]
+    saved = [(lg, lg.level, lg.handlers[:], lg.propagate, lg.disabled) for lg in loggers]
+    hook = sys.excepthook
+
+    def apply(**env):
+        for name in OWN_ENV:
+            monkeypatch.delenv(name, raising=False)
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+        settings = Settings()
+        configure_logging(settings)
+        capsys.readouterr()
+        return settings
+
+    yield apply
+    logging.captureWarnings(False)
+    sys.excepthook = hook
+    for lg, level, handlers, propagate, disabled in saved:
+        for handler in lg.handlers:
+            if handler not in handlers:
+                handler.close()
+        lg.handlers[:] = handlers
+        lg.setLevel(level)
+        lg.propagate, lg.disabled = propagate, disabled
 
 
-def test_the_applied_setup_writes_one_json_object_per_line_and_drops_uvicorns_access_line():
-    r = _run(_SETUP, LOG_FORMAT="json", LOG_LEVEL="info", SERVICE_VERSION="9.9.9")
-    assert r.returncode == 0, r.stderr
-    docs = [json.loads(line) for line in r.stdout.splitlines()]
+def _lines(capsys):
+    return capsys.readouterr().out.splitlines()
+
+
+def _write_sample_lines():
+    logging.getLogger("uvicorn.error").info("started")
+    logging.getLogger("uvicorn.access").info("127.0.0.1 GET /x?q=1")
+    logging.getLogger("app.x").debug("dbg")
+    logging.getLogger("app.x").info("app line")
+
+
+def test_the_applied_setup_writes_one_json_object_per_line_and_drops_uvicorns_access_line(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json", LOG_LEVEL="info", SERVICE_VERSION="9.9.9")
+    _write_sample_lines()
+    out = capsys.readouterr()
+    docs = [json.loads(line) for line in out.out.splitlines()]
     assert [(d["log.logger"], d["message"]) for d in docs] == [("uvicorn.error", "started"), ("app.x", "app line")]
     assert {d["service.version"] for d in docs} == {"9.9.9"}
-    assert r.stderr == ""
+    assert out.err == ""
 
 
-def test_app_log_level_is_still_read_when_log_level_is_not_set():
-    r = _run(_SETUP, LOG_FORMAT="json", APP_LOG_LEVEL="debug")
-    assert r.returncode == 0, r.stderr
-    assert "dbg" in [json.loads(line)["message"] for line in r.stdout.splitlines()]
+def test_app_log_level_is_still_read_when_log_level_is_not_set(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json", APP_LOG_LEVEL="debug")
+    _write_sample_lines()
+    assert "dbg" in [json.loads(line)["message"] for line in _lines(capsys)]
 
 
-def test_log_level_wins_over_app_log_level():
-    r = _run("from app.config import settings; print(settings.LOG_LEVEL)", LOG_LEVEL="warn", APP_LOG_LEVEL="debug")
-    assert r.stdout.strip() == "warn"
+def test_log_level_wins_over_app_log_level(monkeypatch):
+    monkeypatch.setenv("LOG_LEVEL", "warn")
+    monkeypatch.setenv("APP_LOG_LEVEL", "debug")
+    assert Settings().LOG_LEVEL == "warn"
 
 
-def test_an_unknown_log_level_stops_the_start():
-    r = _run(_SETUP, LOG_LEVEL="verbose")
-    assert r.returncode != 0
-    assert "LOG_LEVEL='verbose'" in r.stderr
+def test_an_unknown_log_level_stops_the_start(setup_from_env):
+    with pytest.raises(ValueError, match="LOG_LEVEL='verbose'"):
+        setup_from_env(LOG_LEVEL="verbose")
 
 
 def test_text_line_escapes_control_characters():
@@ -170,38 +206,44 @@ def test_text_line_escapes_control_characters():
     assert 'forged' + chr(92) + 'n2026' in line and chr(92) + 'x1b[31m' in line
 
 
-def test_uvicorn_connection_lines_stay_out_even_at_trace():
-    code = ("import logging; from app.logging_config import configure_logging; configure_logging(); "
-            "logging.getLogger('uvicorn.error').log(5, '%s - HTTP connection made', '203.0.113.7:51234'); "
-            "logging.getLogger('uvicorn.error').debug('uvicorn debug'); "
-            "logging.getLogger('app.x').log(5, 'app trace')")
-    r = _run(code, LOG_FORMAT="json", LOG_LEVEL="trace")
-    assert r.returncode == 0, r.stderr
-    assert [json.loads(line)["message"] for line in r.stdout.splitlines()] == ["uvicorn debug", "app trace"]
-    assert "203.0.113.7" not in r.stdout + r.stderr
+def test_uvicorn_connection_lines_stay_out_even_at_trace(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json", LOG_LEVEL="trace")
+    logging.getLogger("uvicorn.error").log(5, "%s - HTTP connection made", "203.0.113.7:51234")
+    logging.getLogger("uvicorn.error").debug("uvicorn debug")
+    logging.getLogger("app.x").log(5, "app trace")
+    lines = _lines(capsys)
+    assert [json.loads(line)["message"] for line in lines] == ["uvicorn debug", "app trace"]
+    assert "203.0.113.7" not in "".join(lines)
 
 
-def test_empty_log_level_and_format_mean_the_defaults():
-    r = _run(_SETUP, LOG_LEVEL="", LOG_FORMAT="")
-    assert r.returncode == 0, r.stderr
-    lines = r.stdout.splitlines()
+def test_empty_log_level_and_format_mean_the_defaults(setup_from_env, capsys):
+    settings = setup_from_env(LOG_LEVEL="", LOG_FORMAT="")
+    assert (settings.LOG_LEVEL, settings.LOG_FORMAT) == ("info", "text")
+    _write_sample_lines()
+    lines = _lines(capsys)
     assert len(lines) == 2 and not lines[0].startswith("{")  # text, info: no debug line
-    assert "dbg" not in r.stdout
+    assert not any("dbg" in line for line in lines)
 
 
-def test_warnings_go_through_the_logging_setup():
-    r = _run(_SETUP + "; import warnings; warnings.warn('careful')", LOG_FORMAT="json")
-    assert r.returncode == 0, r.stderr
-    docs = [json.loads(line) for line in r.stdout.splitlines()]
+def test_warnings_go_through_the_logging_setup(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json")
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        warnings.warn("careful", stacklevel=1)
+    out = capsys.readouterr()
+    docs = [json.loads(line) for line in out.out.splitlines()]
     assert docs[-1]["log.logger"] == "py.warnings" and "careful" in docs[-1]["message"]
-    assert r.stderr == ""
+    assert out.err == ""
 
 
-def test_an_empty_log_level_falls_back_to_app_log_level():
-    r = _run("from app.config import settings; print(settings.LOG_LEVEL, settings.LOG_FORMAT)",
-             LOG_LEVEL="", APP_LOG_LEVEL="debug", LOG_FORMAT="")
-    assert r.returncode == 0, r.stderr
-    assert r.stdout.split() == ["debug", "text"]
+def test_an_empty_log_level_falls_back_to_app_log_level(monkeypatch):
+    for name in OWN_ENV:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LOG_LEVEL", "")
+    monkeypatch.setenv("APP_LOG_LEVEL", "debug")
+    monkeypatch.setenv("LOG_FORMAT", "")
+    settings = Settings()
+    assert (settings.LOG_LEVEL, settings.LOG_FORMAT) == ("debug", "text")
 
 
 # A file name too long for files.name fails on the row with the user id, a too long extension on the
@@ -230,40 +272,59 @@ def test_every_engine_hides_sql_parameters():
         assert "hide_parameters=True" in f.read()
 
 
+@pytest.mark.parametrize("level,effective", [("info", "info"), ("warning", "warn"), ("error", "error")])
+def test_one_start_up_line_with_version_and_effective_level(setup_from_env, capsys, level, effective):
+    settings = setup_from_env(LOG_FORMAT="json", LOG_LEVEL=level, SERVICE_VERSION="9.9.9")
+    log_service_start(settings)
+    starts = [d for d in map(json.loads, _lines(capsys)) if d.get("event.action") == "service.start"]
+    assert len(starts) == 1
+    assert starts[0]["log.level"] == "info"
+    assert starts[0]["service.version"] == "9.9.9"
+    assert starts[0]["message"] == f"service start: version 9.9.9, log level {effective}"
+
+
+def _run(code, **env):
+    full_env = {k: v for k, v in os.environ.items() if k not in OWN_ENV}
+    full_env.update(env)
+    return subprocess.run([sys.executable, "-c", code], cwd=REPO, env=full_env,
+                          capture_output=True, text=True, timeout=60)
+
+
 _START = ("import runpy, uvicorn; uvicorn.run = lambda *args, **kwargs: None; "
           "runpy.run_path('main.py', run_name='__main__')")
 
 
-@pytest.mark.parametrize("level,effective", [("info", "info"), ("warning", "warn"), ("error", "error")])
-def test_one_start_up_line_with_version_and_effective_level(level, effective):
-    r = _run(_START, LOG_FORMAT="json", LOG_LEVEL=level, SERVICE_VERSION="9.9.9", DB_PASSWORD="db-secret-value")
+def test_main_starts_with_one_json_start_up_line_and_no_secret():
+    r = _run(_START, LOG_FORMAT="json", LOG_LEVEL="warning", SERVICE_VERSION="9.9.9", DB_PASSWORD="db-secret-value")
     assert r.returncode == 0, r.stderr
     starts = [d for d in map(json.loads, r.stdout.splitlines()) if d.get("event.action") == "service.start"]
     assert len(starts) == 1
     assert starts[0]["log.level"] == "info"
     assert starts[0]["service.version"] == "9.9.9"
-    assert starts[0]["message"] == f"service start: version 9.9.9, log level {effective}"
+    assert starts[0]["log.effective_level"] == "warn"
     assert "db-secret-value" not in r.stdout + r.stderr
 
 
-def test_deployment_environment_is_on_every_line():
-    r = _run(_SETUP, LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT="pilot")
-    assert r.returncode == 0, r.stderr
-    assert [json.loads(line)["deployment.environment"] for line in r.stdout.splitlines()] == ["pilot", "pilot"]
+def test_deployment_environment_is_on_every_line(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT="pilot")
+    _write_sample_lines()
+    assert [json.loads(line)["deployment.environment"] for line in _lines(capsys)] == ["pilot", "pilot"]
 
 
 @pytest.mark.parametrize("env", [{}, {"DEPLOYMENT_ENVIRONMENT": ""}, {"DEPLOYMENT_ENVIRONMENT": "   "}],
                          ids=["unset", "empty", "blank"])
-def test_deployment_environment_is_left_out_when_not_set(env):
-    r = _run(_SETUP, LOG_FORMAT="json", **env)
-    assert r.returncode == 0, r.stderr
-    assert not any("deployment.environment" in json.loads(line) for line in r.stdout.splitlines())
+def test_deployment_environment_is_left_out_when_not_set(setup_from_env, capsys, env):
+    setup_from_env(LOG_FORMAT="json", **env)
+    _write_sample_lines()
+    lines = _lines(capsys)
+    assert len(lines) == 2
+    assert not any("deployment.environment" in json.loads(line) for line in lines)
 
 
-def test_deployment_environment_is_trimmed():
-    r = _run(_SETUP, LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT=" pilot ")
-    assert r.returncode == 0, r.stderr
-    assert {json.loads(line)["deployment.environment"] for line in r.stdout.splitlines()} == {"pilot"}
+def test_deployment_environment_is_trimmed(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json", DEPLOYMENT_ENVIRONMENT=" pilot ")
+    _write_sample_lines()
+    assert {json.loads(line)["deployment.environment"] for line in _lines(capsys)} == {"pilot"}
 
 
 def test_text_line_has_the_deployment_environment():

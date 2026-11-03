@@ -28,8 +28,6 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from app.config import settings
-
 SERVICE_NAME = "eegfaktura-filestore"
 
 TRACE = 5
@@ -188,16 +186,16 @@ def dict_config(level: int, fmt: str, service_version: str, deployment_environme
     }
 
 
-def configure_logging() -> None:
-    """Apply the logging setup from the settings; an unknown LOG_LEVEL or LOG_FORMAT stops the start;
-    an empty value means the default."""
+def configure_logging(settings) -> None:
+    """Apply the logging setup from the settings (app.config.Settings); an unknown LOG_LEVEL or
+    LOG_FORMAT stops the start; an empty value means the default."""
     level = parse_level(settings.LOG_LEVEL)
     fmt = parse_format(settings.LOG_FORMAT)
     logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION, settings.DEPLOYMENT_ENVIRONMENT))
     logging.captureWarnings(True)
 
 
-def log_service_start() -> None:
+def log_service_start(settings) -> None:
     """The one start-up line: version and effective log level. Written at info whatever LOG_LEVEL says,
     so that every deployment shows since when it runs and how; nothing from the settings but these."""
     logger = logging.getLogger("app.start")
