@@ -121,14 +121,16 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
     :return: Specified file
     """
     async with get_session() as s:
+        # joined, so the category filter below applies to this file's category
         filequery = select(file_model.File) \
+            .join(file_model.File.file_container) \
+            .join(file_container_model.FileContainer.file_category) \
             .options(load_only(file_model.File.tenant,
                                file_model.File.user_id,
                                file_model.File.created_at,
                                file_model.File.name),
-                     selectinload(file_model.File.file_container)
-                     .selectinload(file_container_model.FileContainer.file_category)
-                     .options(load_only(file_category_model.FileCategory.name)),
+                     contains_eager(file_model.File.file_container)
+                     .contains_eager(file_container_model.FileContainer.file_category),
                      selectinload(file_model.File.file_attributes)
                      .options(load_only(file_attribute_model.FileAttribute.key,
                                         file_attribute_model.FileAttribute.value))) \
@@ -286,44 +288,6 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
     except FileNotFoundError as fnfe:
         # TODO Log error
         return AddFileError(message=f"{fnfe.strerror}  {fnfe.filename}")
-
-
-async def get_file_for_category(category: str, id: uuid.UUID, info):
-    """
-    Get file specified by id
-    :param id: File uuid
-    :param info:
-    :return: Specified file
-    """
-    async with get_session() as s:
-        filequery = select(file_model.File) \
-            .options(load_only(file_model.File.tenant,
-                               file_model.File.user_id,
-                               file_model.File.created_at,
-                               file_model.File.name),
-                     selectinload(file_model.File.file_container)
-                     .selectinload(file_container_model.FileContainer.file_category)
-                     .options(load_only(file_category_model.FileCategory.name)),
-                     selectinload(file_model.File.file_attributes)
-                     .options(load_only(file_attribute_model.FileAttribute.key,
-                                        file_attribute_model.FileAttribute.value))) \
-            .filter(file_model.File.id == id) \
-            .filter(file_category_model.FileCategory.name == category)
-
-        file = (await s.execute(filequery)).scalars().unique().one()
-
-    if file is None:
-        raise Exception("Cant't find file")
-
-    info.context["claims"].assert_tenant(file.tenant)
-
-    file_dict = get_valid_data(file, file_model.File)
-    file_dict["attributes"] = file.file_attributes
-    file_dict["file_category"] = file.file_container.file_category.name
-    file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
-                                                          info.context["request"])
-
-    return File(**file_dict)
 
 
 async def delete_file(info, id: uuid.UUID):
