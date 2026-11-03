@@ -30,18 +30,15 @@ import pytest
 import app.health
 from app.access_log import _request_id, _trace_ids
 from app.config import settings
-from app.logging_config import JsonFormatter
+from app.logging_config import CONTEXT_FIELDS, EXTRA_FIELDS, JsonFormatter
 from tests.conftest import auth, make_token, new_tenant
 from tests.test_delete_file import DELETE_FILE, stored_file
 from tests.test_security import upload
 from tests.test_upload_cleanup import add_file
 
-ACCESS_FIELDS = {
-    "@timestamp", "log.level", "log.logger", "service.name", "service.version", "message",
-    "event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
-    "http.response.status_code", "request.id", "trace.id", "span.id", "tenant.id", "client.id",
-    "graphql.operation.name",
-}
+# the fields of every line, the request's fields and the event and http fields the access line passes
+_EVERY_LINE = set(JsonFormatter().fields(logging.LogRecord("x", logging.INFO, __file__, 1, "m", None, None)))
+ACCESS_FIELDS = _EVERY_LINE | set(CONTEXT_FIELDS) | {f for f in EXTRA_FIELDS if f.startswith(("event.", "http."))}
 TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
 SPAN_ID = "00f067aa0ba902b7"
 

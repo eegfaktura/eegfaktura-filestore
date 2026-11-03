@@ -28,7 +28,10 @@ import sys
 import uuid
 import warnings
 
+import alembic.command
+import alembic.config
 import pytest
+import sqlalchemy
 from sqlalchemy.exc import DBAPIError
 
 from app import logging_config
@@ -266,10 +269,21 @@ def test_an_unhandled_db_error_on_upload_logs_no_sql_parameters(client, filename
             assert value not in doc[field]
 
 
-def test_every_engine_hides_sql_parameters():
+def test_every_engine_hides_sql_parameters(setup_from_env, monkeypatch):
+    # setup_from_env: alembic/env.py applies the logging setup, the fixture restores it afterwards
     assert db_session.engine.sync_engine.hide_parameters is True
-    with open(os.path.join(REPO, "alembic", "env.py"), encoding="utf-8") as f:
-        assert "hide_parameters=True" in f.read()
+    engines = []
+
+    def capture(*args, **kwargs):
+        engines.append(real(*args, **kwargs))
+        return engines[-1]
+
+    real = sqlalchemy.engine_from_config
+    monkeypatch.setattr(sqlalchemy, "engine_from_config", capture)
+    cfg = alembic.config.Config(os.path.join(REPO, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(REPO, "alembic"))
+    alembic.command.current(cfg)
+    assert [engine.hide_parameters for engine in engines] == [True]
 
 
 @pytest.mark.parametrize("level,effective", [("info", "info"), ("warning", "warn"), ("error", "error")])
