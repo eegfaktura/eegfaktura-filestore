@@ -80,7 +80,6 @@ def base_tenant(tenant: str) -> str:
 
 class Claims(BaseModel):
     tenants: List[str] = Field(default_factory=list, alias="tenant")
-    preferred_username: Optional[str] = None
     realm_access: dict = Field(default_factory=dict)
     # the Keycloak client the token was issued to (the integration, not a person): client.id in the log
     azp: Optional[str] = None
