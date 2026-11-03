@@ -263,7 +263,9 @@ def test_an_unhandled_db_error_on_upload_logs_no_sql_parameters(client, filename
     doc = json.loads(JsonFormatter().format(
         _record(level=logging.ERROR, exc_info=(failed.type, failed.value, failed.tb))))
     assert doc["error.type"] == f"sqlalchemy.exc.{failed.type.__qualname__}"
-    assert "value too long" in doc["error.message"]  # the reason stays
+    # the reason stays: string_data_right_truncation, in the server's words (they depend on its lc_messages)
+    assert failed.value.orig.sqlstate == "22001"
+    assert str(failed.value.orig) in doc["error.message"]
     for field in ("error.message", "error.stack_trace"):
         for value in (str(user_id), user_id.hex, "max-muster", tenant):
             assert value not in doc[field]
