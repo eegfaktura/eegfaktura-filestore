@@ -17,12 +17,12 @@
 
 # The logging setup comes first, so lines (and warnings) written while the application's modules
 # are imported already go through it; uvicorn imports this module again for "main:application".
+from app.config import settings
 from app.logging_config import configure_logging, log_service_start
 
-configure_logging()
+configure_logging(settings)
 
 import app.dependencies  # noqa: E402
-from app.config import settings  # noqa: E402
 import uvicorn  # noqa: E402
 from app.app import create_app  # noqa: E402
 

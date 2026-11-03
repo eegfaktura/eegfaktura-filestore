@@ -29,12 +29,14 @@ import pytest
 
 import app.health
 from app.access_log import _request_id, _trace_ids
+from app.config import settings
 from app.logging_config import JsonFormatter
 from tests.conftest import auth, make_token, new_tenant
 from tests.test_delete_file import DELETE_FILE, stored_file
 from tests.test_security import upload
 from tests.test_upload_cleanup import add_file
 
+# The contract of the access line, written out: widening the module's field lists must fail here.
 ACCESS_FIELDS = {
     "@timestamp", "log.level", "log.logger", "service.name", "service.version", "message",
     "event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
@@ -259,9 +261,35 @@ def test_superuser_tenant_is_logged_only_when_tenant_shaped(client, access_lines
     query = "query Q($t: String!) { files(tenant: $t) { id } }"
     _graphql(client, headers, query, {"t": "rc100181-003"})
     _graphql(client, headers, query, {"t": "max.muster@example.com"})
-    first, second = access_lines()
+    _graphql(client, headers, query, {"t": "gc123456-001"})
+    first, second, gea = access_lines()
     assert first["tenant.id"] == "RC100181"
     assert "tenant.id" not in second and second["event.outcome"] == "success"
+    assert gea["tenant.id"] == "GC123456"
+
+
+def test_a_granted_tenant_outside_the_tenant_id_rule_is_left_out(client, access_lines):
+    # the token grants the value, the check passes, but it is no tenant id the log may carry
+    _, headers = _personal_headers(["max.muster"])
+    r = client.post(f"/filestore/upload/invoice/max.muster/{uuid.uuid4()}", headers=headers,
+                    files={"file": ("a.exe", b"MZ", "application/x-msdownload")})
+    assert r.status_code == 400  # rejected after the passed tenant check
+    (line,) = access_lines()
+    assert "tenant.id" not in line and line["event.outcome"] == "failure"
+
+
+@pytest.mark.parametrize("checked,logged", [("GC123456", "GC123456"), (" gc123456 ", "GC123456"),
+                                            ("TE100200_X-1", "TE100200_X-1"), ("A" * 64, "A" * 64),
+                                            ("A" * 65, None), ("-GC1", None), ("RC 1", None), ("", None)])
+def test_the_tenant_id_rule(checked, logged):
+    from app.logging_config import log_context, record_tenant_check
+
+    token = log_context.set({})
+    try:
+        record_tenant_check(checked, True)
+        assert log_context.get().get("tenant.id") == logged
+    finally:
+        log_context.reset(token)
 
 
 def test_graphql_errors_are_logged_without_query_text_or_values(client):
@@ -281,7 +309,7 @@ def test_graphql_errors_are_logged_without_query_text_or_values(client):
     raw = stream.getvalue()
     (line,) = [json.loads(x) for x in raw.splitlines()]
     assert line["log.level"] == "warn"
-    assert line["error.type"] == "HTTPException"
+    assert line["error.type"] == "fastapi.exceptions.HTTPException"
     assert line["graphql.error.path"] == "invoices"
     assert user_id not in raw and "invoices(" not in raw and "Tenant not allowed" not in raw
 
@@ -327,6 +355,8 @@ def test_rest_application_line_has_request_and_tenant(client, request_lines):
     assert line["log.level"] == "warn"
     assert line["request.id"] == "req-lines"
     assert line["tenant.id"] == tenant
+    assert file_id in line["message"]  # the ids, not the on-disk path
+    assert settings.FILESTORE_LOCAL_BASE_DIR not in line["message"]
 
 
 def test_graphql_application_line_has_request_and_tenant(client, request_lines):
@@ -362,6 +392,7 @@ def test_a_line_before_any_passed_check_has_the_request_but_no_tenant(client, re
     (line,) = request_lines("app.auth")
     assert line["request.id"] == "req-lines"
     assert "tenant.id" not in line
+    assert "segments" not in line["message"]  # the class name only, not PyJWT's "Not enough segments"
 
 
 def test_the_line_of_an_unhandled_error_has_request_and_tenant(request_lines):

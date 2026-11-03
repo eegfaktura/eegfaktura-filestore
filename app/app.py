@@ -28,6 +28,7 @@ from app.graphql.schemas.query_schema import Query
 from app.rest.routers import filestore
 from app import health
 from app.access_log import AccessLogMiddleware, GraphQLOperationName
+from app.logging_config import error_type
 from app.config import settings
 
 _graphql_logger = logging.getLogger("strawberry.execution")
@@ -41,7 +42,7 @@ class Schema(strawberry.Schema):
             original = error.original_error
             expected = isinstance(original, HTTPException) and original.status_code < 500
             _graphql_logger.log(logging.WARNING if expected else logging.ERROR, "GraphQL error", extra={
-                "error.type": type(original or error).__name__,
+                "error.type": error_type(type(original or error)),
                 "graphql.error.path": ".".join(str(p) for p in error.path or []) or None,
                 "error.stack_trace": None if expected or original is None
                 else "".join(traceback.format_tb(original.__traceback__)),

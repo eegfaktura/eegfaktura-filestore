@@ -16,7 +16,6 @@
 #
 
 import logging
-import re
 from typing import List, Optional
 
 import jwt
@@ -66,10 +65,6 @@ _PUBLIC_KEY: str = _load_public_key()
 
 _bearer = HTTPBearer(auto_error=True)
 
-# Tenant ids as the communities have them (RC100181, GC106668, CC100613, TE100200): for the log only.
-_TENANT_ID = re.compile(r"[A-Z]{2}[0-9]{6}")
-
-
 def base_tenant(tenant: str) -> str:
     """Map a tenant id to the stem tenant used for document storage.
 
@@ -104,10 +99,11 @@ class Claims(BaseModel):
 
     def assert_tenant(self, tenant: str) -> None:
         wanted = base_tenant(tenant).upper()
-        # the request's log context (app.access_log): the checked stem as tenant.id, or "refused".
-        # A superuser's argument is not checked against the token, so only a tenant-shaped value is kept.
+        # the request's log context (app.access_log): the checked stem as tenant.id, or "refused";
+        # record_tenant_check keeps only a value that passes the tenant.id rule (a superuser's argument
+        # is not checked against the token).
         if self.is_superuser():
-            record_tenant_check(wanted if _TENANT_ID.fullmatch(wanted) else None, True)
+            record_tenant_check(wanted, True)
             return
         allowed = {base_tenant(t).upper() for t in self.tenants}
         record_tenant_check(wanted, wanted in allowed)
@@ -130,7 +126,8 @@ def get_claims(
             options={"require": ["exp"]},
         )
     except jwt.PyJWTError as e:
-        logger.warning("JWT decode failed: %s: %s", type(e).__name__, e)
+        # the class names the failed check (ExpiredSignatureError, InvalidAudienceError, ...); the text is left out
+        logger.warning("JWT decode failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",

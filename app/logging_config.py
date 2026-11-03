@@ -25,10 +25,9 @@ import json
 import logging
 import logging.config
 import re
+import sys
 from datetime import datetime, timezone
 from typing import Optional
-
-from app.config import settings
 
 SERVICE_NAME = "eegfaktura-filestore"
 
@@ -63,6 +62,12 @@ def parse_format(value: str) -> str:
     return fmt
 
 
+def error_type(exc_type: type) -> str:
+    """error.type: the fully qualified class name (module and qualified name), e.g.
+    sqlalchemy.exc.OperationalError or builtins.KeyError."""
+    return f"{exc_type.__module__}.{exc_type.__qualname__}"
+
+
 def _level_name(levelno: int) -> str:
     if levelno <= TRACE:
         return "trace"
@@ -85,10 +90,19 @@ def current_log_context() -> dict:
     return ctx if ctx is not None else {}
 
 
+# tenant.id (all services): letters, digits, "_" and "-", up to 64, after upper-casing
+_TENANT_ID = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,63}")
+
+
 def record_tenant_check(tenant: Optional[str], allowed: bool) -> None:
     """Note a tenant check in the request's context: tenant.id only when every check of the request
     passed and all were for the same tenant; a refused check marks the request as refused.
-    `tenant` is the checked stem (app.auth), None for a passed check whose tenant is not logged."""
+    `tenant` is the checked stem (app.auth); the one place of the tenant.id rule of all services:
+    stripped and upper-cased it must match _TENANT_ID, otherwise the check counts as one whose tenant
+    is not logged (a passed check then leaves tenant.id out)."""
+    tenant = (tenant or "").strip().upper()
+    if not _TENANT_ID.fullmatch(tenant):
+        tenant = None
     ctx = current_log_context()
     if allowed:
         ctx.setdefault("_tenants", set()).add(tenant)
@@ -135,7 +149,7 @@ class _Formatter(logging.Formatter):
                 out[key] = value
         out["message"] = record.getMessage()
         if record.exc_info and record.exc_info[0] is not None:
-            out["error.type"] = record.exc_info[0].__name__
+            out["error.type"] = error_type(record.exc_info[0])
             out["error.message"] = str(record.exc_info[1])
             out["error.stack_trace"] = self.formatException(record.exc_info)
         return out
@@ -183,26 +197,39 @@ def dict_config(level: int, fmt: str, service_version: str, deployment_environme
             # never below debug: uvicorn logs connections ("HTTP connection made", client IP:port) at trace
             "uvicorn.error": {"handlers": [], "propagate": True, "level": max(level, logging.DEBUG)},
             "uvicorn.access": {"handlers": ["null"], "propagate": False},
+            # the access and start lines are written at info whatever LOG_LEVEL says
+            "app.access": {"level": logging.INFO},
+            "app.start": {"level": logging.INFO},
         },
         "root": {"level": level, "handlers": ["stdout"]},
     }
 
 
-def configure_logging() -> None:
-    """Apply the logging setup from the settings; an unknown LOG_LEVEL or LOG_FORMAT stops the start;
-    an empty value means the default."""
+def configure_logging(settings) -> None:
+    """Apply the logging setup from the settings (app.config.Settings); an unknown LOG_LEVEL or
+    LOG_FORMAT stops the start; an empty value means the default."""
     level = parse_level(settings.LOG_LEVEL)
     fmt = parse_format(settings.LOG_FORMAT)
     logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION, settings.DEPLOYMENT_ENVIRONMENT))
     logging.captureWarnings(True)
+    sys.excepthook = _log_uncaught
+
+
+def _log_uncaught(exc_type, exc, tb) -> None:
+    # An exception nothing caught (alembic not reaching the database, a bad JWT key file at import)
+    # ends the process: one line through the setup above instead of a plain traceback on stderr, with
+    # the exception's message (error.message: why the migration failed). KeyboardInterrupt and the
+    # other non-Exception BaseExceptions are no errors of the service: the default hook as before.
+    if not issubclass(exc_type, Exception):
+        sys.__excepthook__(exc_type, exc, tb)
+        return
+    logging.getLogger("app.uncaught").critical("uncaught exception, the process stops", exc_info=(exc_type, exc, tb))
 
 
 def log_service_start() -> None:
-    """The one start-up line: version and effective log level. Written at info whatever LOG_LEVEL says,
-    so that every deployment shows since when it runs and how; nothing from the settings but these."""
-    logger = logging.getLogger("app.start")
-    level = _level_name(logger.getEffectiveLevel())
-    logger.handle(logger.makeRecord(
-        logger.name, logging.INFO, __file__, 0, "service start: version %s, log level %s",
-        (settings.SERVICE_VERSION, level), None,
-        extra={"event.action": "service.start", "log.effective_level": level}))
+    """The one start-up line with the effective log level (service.version is on every line). Written
+    at info whatever LOG_LEVEL says (app.start has level info, see dict_config), so that every
+    deployment shows since when it runs and how; nothing from the settings but these."""
+    level = _level_name(logging.getLogger().getEffectiveLevel())
+    logging.getLogger("app.start").info("service start", extra={
+        "event.action": "service.start", "log.effective_level": level})
