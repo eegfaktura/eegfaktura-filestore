@@ -45,11 +45,15 @@ def test_delete_file_whose_file_is_gone_still_deletes_and_logs(client, caplog):
 
 def test_delete_file_reports_other_errors_removing_the_file(client, monkeypatch):
     tenant, file = uploaded(client)
+    path = stored_file(file["id"])
 
     def no_permission(path):
         raise PermissionError(path)
 
     monkeypatch.setattr(app.dependencies, "delete_file", no_permission)
-    r = gql(client, auth([tenant]), DELETE_FILE, {"id": file["id"]})
+    try:
+        r = gql(client, auth([tenant]), DELETE_FILE, {"id": file["id"]})
+    finally:
+        os.remove(path)  # the row is gone; the file would stay in the shared base dir for the session
 
     assert r.json()["data"] is None and r.json()["errors"], r.text
