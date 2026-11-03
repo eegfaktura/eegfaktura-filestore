@@ -90,10 +90,19 @@ def current_log_context() -> dict:
     return ctx if ctx is not None else {}
 
 
+# tenant.id (all services): letters, digits, "_" and "-", up to 64, after upper-casing
+_TENANT_ID = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,63}")
+
+
 def record_tenant_check(tenant: Optional[str], allowed: bool) -> None:
     """Note a tenant check in the request's context: tenant.id only when every check of the request
     passed and all were for the same tenant; a refused check marks the request as refused.
-    `tenant` is the checked stem (app.auth), None for a passed check whose tenant is not logged."""
+    `tenant` is the checked stem (app.auth); the one place of the tenant.id rule of all services:
+    stripped and upper-cased it must match _TENANT_ID, otherwise the check counts as one whose tenant
+    is not logged (a passed check then leaves tenant.id out)."""
+    tenant = (tenant or "").strip().upper()
+    if not _TENANT_ID.fullmatch(tenant):
+        tenant = None
     ctx = current_log_context()
     if allowed:
         ctx.setdefault("_tenants", set()).add(tenant)

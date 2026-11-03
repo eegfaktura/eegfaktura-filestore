@@ -261,9 +261,35 @@ def test_superuser_tenant_is_logged_only_when_tenant_shaped(client, access_lines
     query = "query Q($t: String!) { files(tenant: $t) { id } }"
     _graphql(client, headers, query, {"t": "rc100181-003"})
     _graphql(client, headers, query, {"t": "max.muster@example.com"})
-    first, second = access_lines()
+    _graphql(client, headers, query, {"t": "gc123456-001"})
+    first, second, gea = access_lines()
     assert first["tenant.id"] == "RC100181"
     assert "tenant.id" not in second and second["event.outcome"] == "success"
+    assert gea["tenant.id"] == "GC123456"
+
+
+def test_a_granted_tenant_outside_the_tenant_id_rule_is_left_out(client, access_lines):
+    # the token grants the value, the check passes, but it is no tenant id the log may carry
+    _, headers = _personal_headers(["max.muster"])
+    r = client.post(f"/filestore/upload/invoice/max.muster/{uuid.uuid4()}", headers=headers,
+                    files={"file": ("a.exe", b"MZ", "application/x-msdownload")})
+    assert r.status_code == 400  # rejected after the passed tenant check
+    (line,) = access_lines()
+    assert "tenant.id" not in line and line["event.outcome"] == "failure"
+
+
+@pytest.mark.parametrize("checked,logged", [("GC123456", "GC123456"), (" gc123456 ", "GC123456"),
+                                            ("TE100200_X-1", "TE100200_X-1"), ("A" * 64, "A" * 64),
+                                            ("A" * 65, None), ("-GC1", None), ("RC 1", None), ("", None)])
+def test_the_tenant_id_rule(checked, logged):
+    from app.logging_config import log_context, record_tenant_check
+
+    token = log_context.set({})
+    try:
+        record_tenant_check(checked, True)
+        assert log_context.get().get("tenant.id") == logged
+    finally:
+        log_context.reset(token)
 
 
 def test_graphql_errors_are_logged_without_query_text_or_values(client):
