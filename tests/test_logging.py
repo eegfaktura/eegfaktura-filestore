@@ -274,13 +274,23 @@ def test_every_engine_hides_sql_parameters():
 
 @pytest.mark.parametrize("level,effective", [("info", "info"), ("warning", "warn"), ("error", "error")])
 def test_one_start_up_line_with_version_and_effective_level(setup_from_env, capsys, level, effective):
-    settings = setup_from_env(LOG_FORMAT="json", LOG_LEVEL=level, SERVICE_VERSION="9.9.9")
-    log_service_start(settings)
+    setup_from_env(LOG_FORMAT="json", LOG_LEVEL=level, SERVICE_VERSION="9.9.9")
+    log_service_start()
     starts = [d for d in map(json.loads, _lines(capsys)) if d.get("event.action") == "service.start"]
     assert len(starts) == 1
     assert starts[0]["log.level"] == "info"
+    assert starts[0]["log.logger"] == "app.start"
     assert starts[0]["service.version"] == "9.9.9"
-    assert starts[0]["message"] == f"service start: version 9.9.9, log level {effective}"
+    assert starts[0]["log.effective_level"] == effective
+    assert starts[0]["message"] == "service start"  # the common start message of all services
+
+
+@pytest.mark.parametrize("level", ["warn", "error"])
+def test_the_access_line_is_written_at_info_whatever_the_level(setup_from_env, capsys, level):
+    setup_from_env(LOG_FORMAT="json", LOG_LEVEL=level)
+    logging.getLogger("app.access").info("GET /healthz 200")
+    logging.getLogger("app.x").info("app line")
+    assert [json.loads(line)["log.logger"] for line in _lines(capsys)] == ["app.access"]
 
 
 def test_an_uncaught_exception_is_one_json_line(setup_from_env, capsys):

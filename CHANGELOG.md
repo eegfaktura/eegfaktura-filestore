@@ -16,7 +16,8 @@ this changelog highlights the changes relevant for overview and operations.
 - **`deployment.environment` on every log line** (eegfaktura-dev#45 L14) from the new optional environment variable `DEPLOYMENT_ENVIRONMENT`; the value is trimmed, and the field is left out when the variable is not set or blank. The deployments set it separately (gitops).
 
 ### Changed
-- **One start-up line** (eegfaktura-dev#45 L14): `service start: version <version>, log level <effective level>` with `event.action=service.start`, at info whatever `LOG_LEVEL` says, replaces `Starting uvicorn server...` (which a level above info hid). No other setting, no secrets.
+- **One start-up line** (eegfaktura-dev#45 L14, Q4): `service start` with `event.action=service.start`, `log.effective_level` and the `service.version` every line has, at info whatever `LOG_LEVEL` says, replaces `Starting uvicorn server...` (which a level above info hid). No other setting, no secrets.
+- **The access line is written at `LOG_LEVEL=warn` and `error` too** (eegfaktura-dev#45 Q4): the loggers `app.access` and `app.start` have level info of their own, as in billing; before, a level above info hid the access line.
 - **The failed readiness line names only the exception class** (eegfaktura-dev#45 L11, found by the never-log test): `readiness check failed: database not reachable: ConnectionRefusedError` instead of the exception's repr, which can carry host and database user.
 - **Logging and database settings are read from the environment by pydantic only** (eegfaktura-dev#45 Q3): `LOG_LEVEL` (with the `APP_LOG_LEVEL` fallback), `LOG_FORMAT`, `SERVICE_VERSION`, `DEPLOYMENT_ENVIRONMENT` and `DB_*` no longer have `os.environ` defaults evaluated at import; `DB_DSN` is built from the `DB_*` settings and is no longer an environment variable of its own (no deployment set it). An empty `DB_PORT` now means the default 5432 instead of stopping the import. `configure_logging` takes the settings.
 

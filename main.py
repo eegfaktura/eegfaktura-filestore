@@ -31,7 +31,7 @@ application = create_app()
 
 if __name__ == "__main__":
     app.dependencies.check_tmp_dir()
-    log_service_start(settings)
+    log_service_start()
     # log_config=None: uvicorn keeps the setup above; access_log=False: app.access_log writes the access line
     uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False,
                 log_config=None, access_log=False)

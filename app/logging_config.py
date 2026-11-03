@@ -182,6 +182,9 @@ def dict_config(level: int, fmt: str, service_version: str, deployment_environme
             # never below debug: uvicorn logs connections ("HTTP connection made", client IP:port) at trace
             "uvicorn.error": {"handlers": [], "propagate": True, "level": max(level, logging.DEBUG)},
             "uvicorn.access": {"handlers": ["null"], "propagate": False},
+            # the access and start lines are written at info whatever LOG_LEVEL says
+            "app.access": {"level": logging.INFO},
+            "app.start": {"level": logging.INFO},
         },
         "root": {"level": level, "handlers": ["stdout"]},
     }
@@ -203,12 +206,10 @@ def _log_uncaught(exc_type, exc, tb) -> None:
     logging.getLogger("app.uncaught").critical("uncaught exception, the process stops", exc_info=(exc_type, exc, tb))
 
 
-def log_service_start(settings) -> None:
-    """The one start-up line: version and effective log level. Written at info whatever LOG_LEVEL says,
-    so that every deployment shows since when it runs and how; nothing from the settings but these."""
-    logger = logging.getLogger("app.start")
-    level = _level_name(logger.getEffectiveLevel())
-    logger.handle(logger.makeRecord(
-        logger.name, logging.INFO, __file__, 0, "service start: version %s, log level %s",
-        (settings.SERVICE_VERSION, level), None,
-        extra={"event.action": "service.start", "log.effective_level": level}))
+def log_service_start() -> None:
+    """The one start-up line with the effective log level (service.version is on every line). Written
+    at info whatever LOG_LEVEL says (app.start has level info, see dict_config), so that every
+    deployment shows since when it runs and how; nothing from the settings but these."""
+    level = _level_name(logging.getLogger().getEffectiveLevel())
+    logging.getLogger("app.start").info("service start", extra={
+        "event.action": "service.start", "log.effective_level": level})
