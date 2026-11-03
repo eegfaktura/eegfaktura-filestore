@@ -59,7 +59,7 @@ async def endoint_without_parameters(claims: Claims = Depends(get_claims)):
     "/{file_id}",
     response_class=FileResponse,
     responses={
-        404: {"model": ErrorMessage, "desctiption": "File not found error message"},
+        404: {"model": ErrorMessage, "description": "File not found error message"},
         200: {
             "description": "File download",
             "content": {content_type: {"schema":{"type": "string", "format": "binary"}} for content_type in
@@ -72,7 +72,6 @@ async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)
 
     # Test if file entry was found
     if not metadata:
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 1")
 
     claims.assert_tenant(metadata["tenant"])
@@ -80,13 +79,11 @@ async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)
     # Test if file container is present
     if "file_container_id" not in metadata or \
             metadata["file_container_id"] is None:
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 2")
 
     # Test if file container is present
     if "storage_id" not in metadata or \
             metadata["storage_id"] is None:
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 3")
 
     # Test if file extension is present
@@ -94,20 +91,16 @@ async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)
             metadata["file_attributes"] is None or \
             "file_extension" not in metadata["file_attributes"] or \
             metadata["file_attributes"]["file_extension"] is None:
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 4")
 
     if not os.path.isdir(settings.FILESTORE_LOCAL_BASE_DIR):
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 5")
 
     if not os.path.isdir(settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"])):
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 6")
 
     if not os.path.isdir(settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
             metadata["file_container_id"])):
-        # TODO Logging
         raise HTTPException(status_code=404, detail="File not found 7")
 
     if not os.path.isfile(
@@ -154,7 +147,6 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
     tenant = base_tenant(tenant)
     file_category = file_category.value
 
-    # TODO name determination
     try:
         # first check if filetype is allowed to upload
         if file.content_type not in allowed_media_types:
@@ -209,8 +201,6 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
 
             str_container_id = str(db_file_container.id)
 
-            # TODO Add file Management ...
-
             db_file = file_model.File(tenant=tenant,
                                       user_id=user_id,
                                       name=name,
@@ -260,10 +250,3 @@ async def add_user_file(file: UploadFile, file_category: FileCategoryEnum, tenan
     except FileNotFoundError as fnfe:
         # TODO Log error
         raise HTTPException(status_code=400, detail=f"{fnfe.strerror} {fnfe.filename}") from fnfe
-
-
-#@router.post("/upload/{file_category}/{tenant}")
-#async def add_community_file(self, file: UploadFile, file_category: FileCategoryEnum, tenant: str):
-#    """ Add file """
-#
-#    # TODO upload function for communtiy global files
