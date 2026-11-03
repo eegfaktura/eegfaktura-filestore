@@ -8,6 +8,20 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Added
+- **Never-log test** (eegfaktura-dev#45 L11, `tests/test_never_log.py`, no new dependency): scans the source (`app/`, `main.py`, `alembic/`) and fails the suite on a log call that names personal data or secrets, uses `%r`/`!r`, or writes a value it cannot show to be a literal, an id or a class name. A legitimate exception needs an entry with its reason in the test's `ALLOWED`; two exist (PyJWT's error text, the base directory in the on-disk path).
+
+- **Tests pin the request's fields on every line of a request** (eegfaktura-dev#45 L12): `request.id` and, after a passed tenant check, `tenant.id` were already on all lines through `log_context`; the tests cover the application lines of REST and GraphQL, the GraphQL error line, the JWT refusal and the line of an unhandled error. No change in the service.
+
+- **`deployment.environment` on every log line** (eegfaktura-dev#45 L14) from the new optional environment variable `DEPLOYMENT_ENVIRONMENT`; the value is trimmed, and the field is left out when the variable is not set or blank. The deployments set it separately (gitops).
+
+### Changed
+- **One start-up line** (eegfaktura-dev#45 L14): `service start: version <version>, log level <effective level>` with `event.action=service.start`, at info whatever `LOG_LEVEL` says, replaces `Starting uvicorn server...` (which a level above info hid). No other setting, no secrets.
+- **The failed readiness line names only the exception class** (eegfaktura-dev#45 L11, found by the never-log test): `readiness check failed: database not reachable: ConnectionRefusedError` instead of the exception's repr, which can carry host and database user.
+
+### Fixed
+- **No SQL parameters in the log** (eegfaktura-dev#45 L7): an unhandled database error on a REST upload or download wrote the statement's values (user id, file name) into `error.message` and `error.stack_trace`. Both SQLAlchemy engines (application, Alembic) now run with `hide_parameters=True`; the statement and the database's reason stay in the line.
+
 ## [1.1.0] – 2026-10-31
 
 ### Added

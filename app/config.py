@@ -17,6 +17,7 @@
 
 import os
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,8 @@ class Settings(BaseSettings):
     # LOG_FORMAT: json (the image sets it) or text (default when run from source)
     LOG_FORMAT: str = os.environ.get("LOG_FORMAT") or "text"
     SERVICE_VERSION: str = os.environ.get("SERVICE_VERSION", "dev")
+    # deployment.environment on every log line (local, dev, pilot, prod); the field is left out when not set or blank
+    DEPLOYMENT_ENVIRONMENT: str = os.environ.get("DEPLOYMENT_ENVIRONMENT", "")
     #Load Database config from ENV
     DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
     DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")
@@ -51,5 +54,12 @@ class Settings(BaseSettings):
     JWT_PUBLIC_KEY_FILE: str= os.environ.get("JWT_KEY_FILE", "jwt_pub_key.pem")
     JWT_AUDIENCE: str = os.environ.get("JWT_AUDIENCE", "account")
     GRAPHIQL_ENABLED: bool = os.environ.get("GRAPHIQL_ENABLED", "false").lower() == "true"
+
+    # here and not in the default above: the settings read the environment themselves
+    @field_validator("DEPLOYMENT_ENVIRONMENT")
+    @classmethod
+    def _trim_deployment_environment(cls, value: str) -> str:
+        return value.strip()
+
 settings = Settings()
 

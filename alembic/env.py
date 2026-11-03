@@ -81,6 +81,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        hide_parameters=True,
         # Fixes the default schema SQLAlchemy reads on connect to public, whatever the database user is
         # called (a user named "filestore" would otherwise make filestore the default schema). Then
         # autogenerate/check reflect the filestore tables with their schema, as the models declare them.

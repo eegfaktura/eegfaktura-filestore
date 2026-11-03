@@ -42,7 +42,7 @@ FORMATS = ("json", "text")
 # Per-request fields, set by the access-log middleware and the token check; on every line of the request.
 CONTEXT_FIELDS = ("request.id", "trace.id", "span.id", "tenant.id", "client.id", "graphql.operation.name")
 # Fields a log call may pass in `extra`.
-EXTRA_FIELDS = ("event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
+EXTRA_FIELDS = ("log.effective_level", "event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
                 "http.response.status_code", "error.type", "error.stack_trace", "graphql.error.path")
 
 log_context: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("log_context", default=None)
@@ -109,9 +109,10 @@ def _escape_control(text: str) -> str:
 
 
 class _Formatter(logging.Formatter):
-    def __init__(self, service_version: str = "dev"):
+    def __init__(self, service_version: str = "dev", deployment_environment: str = ""):
         super().__init__()
         self.service_version = service_version
+        self.deployment_environment = deployment_environment
 
     def fields(self, record: logging.LogRecord) -> dict:
         out = {
@@ -122,6 +123,8 @@ class _Formatter(logging.Formatter):
             "service.name": SERVICE_NAME,
             "service.version": self.service_version,
         }
+        if self.deployment_environment:
+            out["deployment.environment"] = self.deployment_environment
         ctx = log_context.get() or {}
         for key in CONTEXT_FIELDS:
             if ctx.get(key) is not None:
@@ -162,12 +165,13 @@ class TextFormatter(_Formatter):
         return line
 
 
-def dict_config(level: int, fmt: str, service_version: str) -> dict:
+def dict_config(level: int, fmt: str, service_version: str, deployment_environment: str = "") -> dict:
     formatter = JsonFormatter if fmt == "json" else TextFormatter
     return {
         "version": 1,
         "disable_existing_loggers": False,
-        "formatters": {"default": {"()": formatter, "service_version": service_version}},
+        "formatters": {"default": {"()": formatter, "service_version": service_version,
+                                   "deployment_environment": deployment_environment}},
         "handlers": {
             "stdout": {"class": "logging.StreamHandler", "formatter": "default", "stream": "ext://sys.stdout"},
             "null": {"class": "logging.NullHandler"},
@@ -189,5 +193,16 @@ def configure_logging() -> None:
     an empty value means the default."""
     level = parse_level(settings.LOG_LEVEL)
     fmt = parse_format(settings.LOG_FORMAT)
-    logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION))
+    logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION, settings.DEPLOYMENT_ENVIRONMENT))
     logging.captureWarnings(True)
+
+
+def log_service_start() -> None:
+    """The one start-up line: version and effective log level. Written at info whatever LOG_LEVEL says,
+    so that every deployment shows since when it runs and how; nothing from the settings but these."""
+    logger = logging.getLogger("app.start")
+    level = _level_name(logger.getEffectiveLevel())
+    logger.handle(logger.makeRecord(
+        logger.name, logging.INFO, __file__, 0, "service start: version %s, log level %s",
+        (settings.SERVICE_VERSION, level), None,
+        extra={"event.action": "service.start", "log.effective_level": level}))
