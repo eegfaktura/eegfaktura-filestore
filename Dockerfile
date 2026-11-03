@@ -36,7 +36,6 @@ LABEL org.opencontainers.image.licenses=AGPL-3.0
 LABEL org.opencontainers.image.source=https://github.com/eegfaktura/eegfaktura-filestore
 LABEL org.opencontainers.image.base.name=docker.io/python:3.13-slim-bookworm
 LABEL description="EEG Faktura filestore service container handling the file upload and download"
-LABEL version="0.1.0"
 
 WORKDIR /vfeeg-filestore
 
