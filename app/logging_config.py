@@ -25,6 +25,7 @@ import json
 import logging
 import logging.config
 import re
+import sys
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -193,6 +194,13 @@ def configure_logging(settings) -> None:
     fmt = parse_format(settings.LOG_FORMAT)
     logging.config.dictConfig(dict_config(level, fmt, settings.SERVICE_VERSION, settings.DEPLOYMENT_ENVIRONMENT))
     logging.captureWarnings(True)
+    sys.excepthook = _log_uncaught
+
+
+def _log_uncaught(exc_type, exc, tb) -> None:
+    # An exception nothing caught (alembic not reaching the database, a bad JWT key file at import)
+    # ends the process: one line through the setup above instead of a plain traceback on stderr.
+    logging.getLogger("app.uncaught").critical("uncaught exception, the process stops", exc_info=(exc_type, exc, tb))
 
 
 def log_service_start(settings) -> None:

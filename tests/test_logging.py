@@ -283,11 +283,51 @@ def test_one_start_up_line_with_version_and_effective_level(setup_from_env, caps
     assert starts[0]["message"] == f"service start: version 9.9.9, log level {effective}"
 
 
-def _run(code, **env):
+def test_an_uncaught_exception_is_one_json_line(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json")
+    try:
+        raise OSError("key file unreadable")
+    except OSError:
+        sys.excepthook(*sys.exc_info())
+    out = capsys.readouterr()
+    (doc,) = [json.loads(line) for line in out.out.splitlines()]
+    assert doc["log.logger"] == "app.uncaught"
+    assert doc["log.level"] == "error"  # critical, written as the highest of the five levels
+    assert doc["error.type"] == "OSError"
+    assert doc["error.message"] == "key file unreadable"
+    assert "Traceback" in doc["error.stack_trace"]
+    assert out.err == ""
+
+
+def _run(args, **env):
     full_env = {k: v for k, v in os.environ.items() if k not in OWN_ENV}
     full_env.update(env)
-    return subprocess.run([sys.executable, "-c", code], cwd=REPO, env=full_env,
-                          capture_output=True, text=True, timeout=60)
+    return subprocess.run(args, cwd=REPO, env=full_env, capture_output=True, text=True, timeout=60)
+
+
+# port 1: nothing listens there, the connection is refused at once
+_DB_DOWN = {"LOG_FORMAT": "json", "DB_HOSTNAME": "127.0.0.1", "DB_PORT": "1"}
+
+
+def _assert_json_failure(r):
+    assert r.returncode != 0
+    docs = [json.loads(line) for line in r.stdout.splitlines()]
+    assert docs[-1]["log.logger"] == "app.uncaught"
+    assert "OperationalError" in docs[-1]["error.type"]
+    assert "Traceback" not in r.stderr
+
+
+def test_alembic_against_a_database_that_is_down_fails_with_a_json_line():
+    _assert_json_failure(_run([sys.executable, "-m", "alembic", "upgrade", "head"], **_DB_DOWN))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="entrypoint.sh is the start script of the Linux image")
+def test_the_entrypoint_stops_when_the_migration_fails():
+    # python3 and alembic of this interpreter first in PATH, as in the image's venv
+    path = os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
+    r = _run(["bash", "entrypoint.sh"], PATH=path, **_DB_DOWN)
+    _assert_json_failure(r)
+    assert "service.start" not in r.stdout
 
 
 _START = ("import runpy, uvicorn; uvicorn.run = lambda *args, **kwargs: None; "
@@ -295,7 +335,7 @@ _START = ("import runpy, uvicorn; uvicorn.run = lambda *args, **kwargs: None; "
 
 
 def test_main_starts_with_one_json_start_up_line_and_no_secret():
-    r = _run(_START, LOG_FORMAT="json", LOG_LEVEL="warning", SERVICE_VERSION="9.9.9", DB_PASSWORD="db-secret-value")
+    r = _run([sys.executable, "-c", _START], LOG_FORMAT="json",LOG_LEVEL="warning", SERVICE_VERSION="9.9.9", DB_PASSWORD="db-secret-value")
     assert r.returncode == 0, r.stderr
     starts = [d for d in map(json.loads, r.stdout.splitlines()) if d.get("event.action") == "service.start"]
     assert len(starts) == 1
