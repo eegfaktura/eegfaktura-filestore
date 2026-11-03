@@ -62,6 +62,12 @@ def parse_format(value: str) -> str:
     return fmt
 
 
+def error_type(exc_type: type) -> str:
+    """error.type: the fully qualified class name (module and qualified name), e.g.
+    sqlalchemy.exc.OperationalError or builtins.KeyError."""
+    return f"{exc_type.__module__}.{exc_type.__qualname__}"
+
+
 def _level_name(levelno: int) -> str:
     if levelno <= TRACE:
         return "trace"
@@ -134,7 +140,7 @@ class _Formatter(logging.Formatter):
                 out[key] = value
         out["message"] = record.getMessage()
         if record.exc_info and record.exc_info[0] is not None:
-            out["error.type"] = record.exc_info[0].__name__
+            out["error.type"] = error_type(record.exc_info[0])
             out["error.message"] = str(record.exc_info[1])
             out["error.stack_trace"] = self.formatException(record.exc_info)
         return out

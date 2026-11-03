@@ -113,7 +113,7 @@ def test_an_exception_becomes_the_error_fields():
     except KeyError:
         record = _record(level=logging.ERROR, exc_info=sys.exc_info())
     doc = json.loads(JsonFormatter().format(record))
-    assert doc["error.type"] == "KeyError"
+    assert doc["error.type"] == "builtins.KeyError"
     assert doc["error.message"] == "'missing'"
     assert "Traceback" in doc["error.stack_trace"]
 
@@ -259,7 +259,7 @@ def test_an_unhandled_db_error_on_upload_logs_no_sql_parameters(client, filename
 
     doc = json.loads(JsonFormatter().format(
         _record(level=logging.ERROR, exc_info=(failed.type, failed.value, failed.tb))))
-    assert doc["error.type"] == failed.type.__name__
+    assert doc["error.type"] == f"sqlalchemy.exc.{failed.type.__qualname__}"
     assert "value too long" in doc["error.message"]  # the reason stays
     for field in ("error.message", "error.stack_trace"):
         for value in (str(user_id), user_id.hex, "max-muster", tenant):
@@ -303,7 +303,7 @@ def test_an_uncaught_exception_is_one_json_line(setup_from_env, capsys):
     (doc,) = [json.loads(line) for line in out.out.splitlines()]
     assert doc["log.logger"] == "app.uncaught"
     assert doc["log.level"] == "error"  # critical, written as the highest of the five levels
-    assert doc["error.type"] == "OSError"
+    assert doc["error.type"] == "builtins.OSError"
     assert doc["error.message"] == "key file unreadable"
     assert "Traceback" in doc["error.stack_trace"]
     assert out.err == ""
@@ -323,7 +323,7 @@ def _assert_json_failure(r):
     assert r.returncode != 0
     docs = [json.loads(line) for line in r.stdout.splitlines()]
     assert docs[-1]["log.logger"] == "app.uncaught"
-    assert "OperationalError" in docs[-1]["error.type"]
+    assert docs[-1]["error.type"] == "sqlalchemy.exc.OperationalError"
     assert "Traceback" not in r.stderr
 
 

@@ -281,7 +281,7 @@ def test_graphql_errors_are_logged_without_query_text_or_values(client):
     raw = stream.getvalue()
     (line,) = [json.loads(x) for x in raw.splitlines()]
     assert line["log.level"] == "warn"
-    assert line["error.type"] == "HTTPException"
+    assert line["error.type"] == "fastapi.exceptions.HTTPException"
     assert line["graphql.error.path"] == "invoices"
     assert user_id not in raw and "invoices(" not in raw and "Tenant not allowed" not in raw
 
