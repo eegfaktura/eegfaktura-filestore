@@ -30,12 +30,24 @@ from app.auth import base_tenant
 from app.config import settings
 
 from app.db.session import get_session
-from app.dependencies import get_valid_data, upload_file, move_file, get_absolute_url, discard_files
+from app.dependencies import upload_file, move_file, get_absolute_url, discard_files
 from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.models import file_container_model, file_category_model, file_model, file_attribute_model, storage_model
 from app.graphql.scalars.file_scalar import File, AddFile, AddFileError, DeleteFile, DeleteFileError
 
 logger = logging.getLogger(__name__)
+
+
+def _to_file(file: file_model.File, request) -> File:
+    """The GraphQL File of a row loaded with its attributes, container and category."""
+    return File(id=file.id,
+                tenant=file.tenant,
+                user_id=file.user_id,
+                name=file.name,
+                created_at=file.created_at,
+                attributes=file.file_attributes,
+                file_category=file.file_container.file_category.name,
+                file_download_uri=get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}", request))
 
 
 async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], category: str, user_id: uuid.UUID,
@@ -99,17 +111,7 @@ async def get_files(tenant: str, info, attributes: typing.List[AttributeInput], 
         # execute the query
         db_files = (await s.execute(filequery)).scalars()
 
-    file_dicts = []
-    for file in db_files:
-        file_dict = get_valid_data(file, file_model.File)
-        file_dict["attributes"] = file.file_attributes
-        file_dict["file_category"] = file.file_container.file_category.name
-        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
-                                                          info.context["request"])
-
-        file_dicts.append(File(**file_dict))
-
-    return file_dicts
+    return [_to_file(file, info.context["request"]) for file in db_files]
 
 
 async def get_file(info, id: uuid.UUID, category: str = ""):
@@ -146,13 +148,7 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
 
     info.context["claims"].assert_tenant(file.tenant)
 
-    file_dict = get_valid_data(file, file_model.File)
-    file_dict["attributes"] = file.file_attributes
-    file_dict["file_category"] = file.file_container.file_category.name
-    file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{file.id}",
-                                                          info.context["request"])
-
-    return File(**file_dict)
+    return _to_file(file, info.context["request"])
 
 
 async def add_file(info, file: UploadFile, name: str, file_category: str, tenant: str,

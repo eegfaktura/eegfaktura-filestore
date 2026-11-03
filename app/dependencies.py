@@ -53,18 +53,6 @@ def get_only_selected_fields(db_baseclass_name, info):
     return selected_fields
 
 
-def get_valid_data(model_data_object, model_class):
-    data_dict = {}
-
-    for column in model_class.__table__.columns:
-        try:
-            data_dict[column.name] = getattr(model_data_object, column.name)
-        except Exception:
-            pass
-
-    return data_dict
-
-
 def get_file_download_uri(file_id: uuid.UUID, caching: bool = False):
     return f"{settings.HTTP_FILE_DL_BASE_URI}/{file_id}" \
            f"{'' if caching else '?' + str(time.time())}"
