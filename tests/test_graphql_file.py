@@ -1,8 +1,9 @@
 # The single-file queries (file, contract, invoice) and the addFile result through the real application.
 
+import json
 import uuid
 
-from tests.conftest import auth, gql, new_tenant, upload
+from tests.conftest import PDF, auth, gql, new_tenant, upload
 
 FILE_FIELDS = "id tenant userId name fileCategory fileDownloadUri createdAt attributes { key value }"
 
@@ -39,3 +40,25 @@ def test_contract_and_invoice_return_a_file_of_their_category_only(client):
         assert r.json()["data"][other] is None, r.text
         assert [e["path"] for e in r.json()["errors"]] == [[other]], r.text
 
+
+def test_add_file_returns_the_user_id_and_no_attributes(client):
+    tenant = new_tenant()
+    user_id = str(uuid.uuid4())
+    query = ("mutation($file: Upload!, $t: String!, $u: UUID) {"
+             " addFile(file: $file, name: \"x\", fileCategory: \"contract\", tenant: $t, userId: $u) {"
+             " __typename ... on AddFile { userId attributes { key } } } }")
+
+    def add(user):
+        # without a user id the variable is left out (the argument is declared UUID!, with a default)
+        variables = {"file": None, "t": tenant} | ({"u": user} if user else {})
+        return client.post(
+            "/graphql",
+            headers=auth([tenant]),
+            data={"operations": json.dumps({"query": query, "variables": variables}),
+                  "map": json.dumps({"0": ["variables.file"]})},
+            files={"0": ("x.pdf", PDF, "application/pdf")},
+        )
+
+    for user, expected in ((user_id, user_id), (None, None)):
+        r = add(user)
+        assert r.json() == {"data": {"addFile": {"__typename": "AddFile", "userId": expected, "attributes": None}}}
