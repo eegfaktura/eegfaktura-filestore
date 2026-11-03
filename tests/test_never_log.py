@@ -19,7 +19,11 @@
 # personal data or secrets, or that writes a whole object. Values are denied by default: a value
 # passes only when it is a literal, an id-like name or a class name. Names are split into words
 # (snake_case, camelCase, the dots of an access) and compared as whole words against the word list
-# all services share; string literals are not scanned for words. A legitimate hit gets an entry in
+# all services share, a word also with a plural "s"; in an all lower-case name a list word of five or
+# more letters also matches inside it (accesstoken). String literals are not scanned for words, except
+# a list word directly before a placeholder of a format string or f-string ("password=%s",
+# f"iban {x}"). Python has no static types here, so values are not skipped by type: a value passes only
+# as a literal, an id-like name or a class name. A legitimate hit gets an entry in
 # ALLOWED (file and finding) with its reason; an entry that no longer matches a hit fails too. A false
 # positive is fixed in the scanner, not allowlisted.
 
@@ -33,14 +37,21 @@ import pytest
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 LOG_METHODS = {"trace", "debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log"}
-# The common word list (eegfaktura-dev#45), as written there; several words are one entry
-# (api_key, "mail address") and match however the name joins them (api_key, apiKey, apikey).
+# The common word list (eegfaktura-dev#45); a word of several parts is one entry ("apikey/api_key",
+# "mail address") and matches however the name joins them (api_key, apiKey, apikey).
 WORD_LIST = ("password", "passwd", "pwd", "secret", "token", "jwt", "bearer", "authorization", "credential",
-             "creds", "cookie", "apikey", "api_key", "iban", "bic", "firstname", "lastname", "vorname",
+             "creds", "cookie", "api_key", "iban", "bic", "firstname", "lastname", "vorname",
              "nachname", "name1", "name2", "street", "phone", "email", "mail address", "recipient", "sentto",
              "owner", "accountholder", "username", "userid", "sub", "subject", "payload", "body")
 SENSITIVE_WORDS = {re.sub(r"[ _]", "", entry) for entry in WORD_LIST}
-_WORD = re.compile(r"[A-Z]+(?![a-z])\d*|[A-Z]?[a-z]+\d*|\d+")
+# an acronym keeps its plural s (IBANs), HTTPAuthorization is http, authorization
+_WORD = re.compile(r"[A-Z]+s?(?![a-z])\d*|[A-Z]?[a-z]+\d*|\d+")
+# a list word this long also matches inside an all lower-case name
+_SUBSTRING_MIN = 5
+_LONG_WORDS = {w for w in SENSITIVE_WORDS if len(w) >= _SUBSTRING_MIN}
+# a %-placeholder or a {}-placeholder, and the word right before it (separators in between allowed)
+_PLACEHOLDER = re.compile(r"%(\([^)]*\))?[-#0 +]*\d*(\.\d+)?[a-zA-Z]|\{[^{}]*\}")
+_WORD_BEFORE = re.compile(r"([A-Za-z0-9_]+)[\s=:'\"(\[-]*$")
 SCALAR = re.compile(r"(^|_)id$|Id$|^method$|^route$|^status(_code)?$")
 OBJECT_DUMPS = {"vars", "repr", "ascii", "dir", "locals", "globals", "asdict", "dict", "json", "dumps",
                 "model_dump", "model_dump_json", "to_dict", "as_dict"}
@@ -78,17 +89,33 @@ def words(name: str) -> list[str]:
     return [w.lower() for w in _WORD.findall(name)]
 
 
+def _listed(word: str) -> bool:
+    return word in SENSITIVE_WORDS or (word.endswith("s") and word[:-1] in SENSITIVE_WORDS)
+
+
 def _sensitive(path: str) -> bool:
-    # a run of whole words, joined, is on the list: first_name and firstName are "firstname",
-    # user.id is "userid" (no user tracking); subscription is not "sub"
+    # a run of whole words, joined, is on the list (also with a plural s): first_name and firstName
+    # are "firstname", user.id is "userid" (no user tracking); subscription is not "sub". In an all
+    # lower-case part a long list word matches inside it: accesstoken, userpassword.
     w = words(path)
-    return any("".join(w[i:j]) in SENSITIVE_WORDS for i in range(len(w)) for j in range(i + 1, len(w) + 1))
+    if any(_listed("".join(w[i:j])) for i in range(len(w)) for j in range(i + 1, len(w) + 1)):
+        return True
+    return any(part == part.lower() and any(word in part for word in _LONG_WORDS) for part in path.split("."))
+
+
+def _word_before_placeholders(parts: list[str]) -> Iterator[str]:
+    # parts: the text before each placeholder; its last word names the value that follows
+    for text in parts:
+        m = _WORD_BEFORE.search(text)
+        if m and _sensitive(m.group(1)):
+            yield f"sensitive word before a placeholder: {m.group(1)}"
 
 
 def _literal(text: str) -> Iterator[str]:
-    # message text is not scanned for words; only a repr conversion is a finding
+    # message text is not scanned for words, except the word right before a placeholder
     if REPR_FORMAT.search(text):
         yield f"repr of an object: {text}"
+    yield from _word_before_placeholders([text[:m.start()] for m in _PLACEHOLDER.finditer(text)])
 
 
 def _value(node: ast.expr) -> Iterator[str]:
@@ -96,8 +123,15 @@ def _value(node: ast.expr) -> Iterator[str]:
         if isinstance(node.value, str):
             yield from _literal(node.value)
     elif isinstance(node, ast.JoinedStr):
+        before = [prev.value for prev, part in zip(node.values, node.values[1:], strict=False)
+                  if isinstance(part, ast.FormattedValue) and isinstance(prev, ast.Constant)]
+        yield from _word_before_placeholders(before)
         for part in node.values:
-            yield from _value(part)
+            if isinstance(part, ast.Constant):
+                if REPR_FORMAT.search(part.value):
+                    yield f"repr of an object: {part.value}"
+            else:
+                yield from _value(part)
     elif isinstance(node, ast.FormattedValue):
         if node.conversion in (ord("r"), ord("a")):
             yield f"repr of an object: {ast.unparse(node)}"
@@ -113,6 +147,8 @@ def _value(node: ast.expr) -> Iterator[str]:
         yield from _value(node.orelse)
     elif isinstance(node, ast.Call):
         name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+        if name == "format" and isinstance(node.func.value, ast.Constant) and isinstance(node.func.value.value, str):
+            yield from _literal(node.func.value.value)  # "token: {}".format(...): the template too
         if name in OBJECT_DUMPS:
             yield f"dump of an object: {ast.unparse(node)}"
         elif name in TRANSPARENT_CALLS and node.args:
@@ -219,6 +255,14 @@ def test_the_scan_sees_the_source():
     'logger.info("upload %s", name)',
     'logger.info("subject %s", claims.sub)',
     'logger.info("x %s", owner_id)',
+    'logger.info("x %s", emails_id)',
+    'logger.info("x %s", accesstoken_id)',
+    'logger.info("password=%s", file_id)',
+    'logger.info("secret: %(x)s", file_id)',
+    'logger.info("token: {}", file_id)',
+    'logger.info("token: {}".format(file_id))',
+    'logger.info(f"iban {file_id}")',
+    'logger.info(f"recipients: {file_id}")',
     'logger.info("x %s", recipientId)',
     'logger.info("x %s", str(claims.subject))',
     'logger.info("x", extra={"user.email": value})',
@@ -259,6 +303,8 @@ def test_the_scan_finds(line):
     'logger.info("x", extra={"event.action": "http.access", "http.response.status_code": status})',
     '_graphql_logger.log(logging.ERROR, "GraphQL error")',
     'logger.info("e-mail not sent, token refused")',
+    'logger.info("token refused for file %s", file_id)',
+    'logger.info(f"file {file_id} sent by e-mail")',
     'logger.info("subscription %s", subscription_id)',
     'logger.info("x", extra={"event.action": "user.email.sent"})',
     'catalog.size(email)',
@@ -270,12 +316,14 @@ def test_the_scan_leaves_alone(line):
 
 @pytest.mark.parametrize("name", ["firstName", "first_name", "FIRSTNAME", "api_key", "apiKey", "mail_address",
                                   "mailAddress", "name1", "accountHolder", "sent_to", "HTTPAuthorization",
-                                  "user.id", "current_user.id", "claims.sub", "request.body", "jwt", "iban"])
+                                  "user.id", "current_user.id", "claims.sub", "request.body", "jwt", "iban",
+                                  "tokens", "emails", "passwords", "recipients", "IBANs", "payerIBANs", "subs",
+                                  "accesstoken", "userpassword", "mailaddress", "tokenizer", "streetwise"])
 def test_the_word_list_matches_whole_words(name):
     assert _sensitive(name)
 
 
-@pytest.mark.parametrize("name", ["subscription", "file_id", "tokenizer", "bodyguard", "streetwise", "nickname",
-                                  "file.name", "storage.id", "tenant", "subtenant_id"])
+@pytest.mark.parametrize("name", ["subscription", "file_id", "bodyguard", "bicycle", "nickname", "Tokenizer",
+                                  "file.name", "storage.id", "tenant", "subtenant_id", "status"])
 def test_the_word_list_leaves_other_words_alone(name):
     assert not _sensitive(name)

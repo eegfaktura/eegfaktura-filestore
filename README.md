@@ -47,7 +47,7 @@ Environment variables (names only — never commit secret values):
 - `FILESTORE_LOCAL_BASE_DIR`, `FILESTORE_TEMP_DIR`
 - `JWT_KEY_FILE`, `JWT_AUDIENCE`
 - `GRAPHIQL_ENABLED` — **disable in production**
-- `LOG_LEVEL` — `trace`, `debug`, `info` (default), `warn`, `error`; an unknown value stops the start.
+- `LOG_LEVEL` — `trace`, `debug`, `info` (default), `warn` (`warning` is accepted as `warn`), `error`; an unknown value stops the start.
   The former `APP_LOG_LEVEL` is still read when `LOG_LEVEL` is not set.
 - `LOG_FORMAT` — `json` (set in the image: one JSON object per line on stdout, ECS field names) or
   `text` (default when run from source)
