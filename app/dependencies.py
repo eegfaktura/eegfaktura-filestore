@@ -19,7 +19,6 @@
 import contextlib
 import errno
 import os.path
-import re
 import time
 
 import aiofiles
@@ -30,7 +29,6 @@ import uuid
 
 from fastapi import UploadFile
 from sqlalchemy import select
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
@@ -38,19 +36,6 @@ from app.config import settings
 from app.models import file_model, file_container_model, storage_model
 
 from fastapi import Request
-
-
-def convert_camel_case(name):
-    pattern = re.compile(r'(?<!^)(?=[A-Z])')
-    name = pattern.sub('_', name).lower()
-    return name
-
-
-def get_only_selected_fields(db_baseclass_name, info):
-    db_relations_fields = inspect(db_baseclass_name).relationships.keys()
-    selected_fields = [convert_camel_case(field.name) for field in
-                       info.selected_fields[0].selections if field.name not in db_relations_fields]
-    return selected_fields
 
 
 def get_file_download_uri(file_id: uuid.UUID, caching: bool = False):
@@ -124,17 +109,6 @@ def is_valid_uuid(value):
 
     except ValueError:
         return False
-
-
-async def calculate_file_attributes(filename: str):
-    file_attributes_dict = {}
-
-    if not os.path.isfile(filename):
-        raise FileNotFoundError(
-            errno.ENONET, os.strerror(errno.ENONET), filename
-        )
-
-    return file_attributes_dict
 
 
 async def upload_file(source_file_object: UploadFile, target_file_name: str):
