@@ -130,7 +130,8 @@ def get_claims(
             options={"require": ["exp"]},
         )
     except jwt.PyJWTError as e:
-        logger.warning("JWT decode failed: %s: %s", type(e).__name__, e)
+        # the class names the failed check (ExpiredSignatureError, InvalidAudienceError, ...); the text is left out
+        logger.warning("JWT decode failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",

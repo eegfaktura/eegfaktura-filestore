@@ -29,6 +29,7 @@ import pytest
 
 import app.health
 from app.access_log import _request_id, _trace_ids
+from app.config import settings
 from app.logging_config import JsonFormatter
 from tests.conftest import auth, make_token, new_tenant
 from tests.test_delete_file import DELETE_FILE, stored_file
@@ -327,6 +328,8 @@ def test_rest_application_line_has_request_and_tenant(client, request_lines):
     assert line["log.level"] == "warn"
     assert line["request.id"] == "req-lines"
     assert line["tenant.id"] == tenant
+    assert file_id in line["message"]  # the ids, not the on-disk path
+    assert settings.FILESTORE_LOCAL_BASE_DIR not in line["message"]
 
 
 def test_graphql_application_line_has_request_and_tenant(client, request_lines):
@@ -362,6 +365,7 @@ def test_a_line_before_any_passed_check_has_the_request_but_no_tenant(client, re
     (line,) = request_lines("app.auth")
     assert line["request.id"] == "req-lines"
     assert "tenant.id" not in line
+    assert "segments" not in line["message"]  # the class name only, not PyJWT's "Not enough segments"
 
 
 def test_the_line_of_an_unhandled_error_has_request_and_tenant(request_lines):

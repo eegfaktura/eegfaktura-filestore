@@ -113,8 +113,8 @@ async def download_file(file_id: uuid.UUID, claims: Claims = Depends(get_claims)
     if not os.path.isfile(
             settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
                 metadata["file_container_id"]) + "/" + str(file_id)):
-        logger.warning("download: file missing on disk: %s", settings.FILESTORE_LOCAL_BASE_DIR + "/" + str(metadata["storage_id"]) + "/" + str(
-            metadata["file_container_id"]) + "/" + str(file_id))
+        logger.warning("download: file missing on disk: storage %s, container %s, file %s",
+                       metadata["storage_id"], metadata["file_container_id"], file_id)
         raise HTTPException(status_code=404, detail="File not found 8")
 
     return FileResponse(

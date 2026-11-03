@@ -9,7 +9,7 @@ this changelog highlights the changes relevant for overview and operations.
 ## [Unreleased]
 
 ### Added
-- **Never-log test** (eegfaktura-dev#45 L11, `tests/test_never_log.py`, no new dependency): scans the source (`app/`, `main.py`, `alembic/`) and fails the suite on a log call that names personal data or secrets, uses `%r`/`!r`, or writes a value it cannot show to be a literal, an id or a class name. A legitimate exception needs an entry with its reason in the test's `ALLOWED`; two exist (PyJWT's error text, the base directory in the on-disk path).
+- **Never-log test** (eegfaktura-dev#45 L11, Q2, `tests/test_never_log.py`, no new dependency): scans the source (`app/`, `main.py`, `alembic/`) and fails the suite on a log call that names personal data or secrets, uses `%r`/`!r`, or writes a value it cannot show to be a literal, an id or a class name. Names are split into words (snake_case, camelCase, the dots of an access) and compared as whole words against the word list all services share; message text is not scanned for words. A legitimate exception needs an entry (file and finding) with its reason in the test's `ALLOWED`; there is none: the two former ones are fixed at the call site (see Changed).
 
 - **Tests pin the request's fields on every line of a request** (eegfaktura-dev#45 L12): `request.id` and, after a passed tenant check, `tenant.id` were already on all lines through `log_context`; the tests cover the application lines of REST and GraphQL, the GraphQL error line, the JWT refusal and the line of an unhandled error. No change in the service.
 
@@ -20,6 +20,7 @@ this changelog highlights the changes relevant for overview and operations.
 - **`error.type` is the fully qualified class name** (eegfaktura-dev#45 Q5, the rule of all services): module and qualified name, e.g. `sqlalchemy.exc.OperationalError`, `fastapi.exceptions.HTTPException`, `builtins.KeyError`, instead of the bare class name — on exception lines and on the GraphQL error line. A Dynatrace filter on the bare name needs the new value.
 - **The access line is written at `LOG_LEVEL=warn` and `error` too** (eegfaktura-dev#45 Q4): the loggers `app.access` and `app.start` have level info of their own, as in billing; before, a level above info hid the access line.
 - **The failed readiness line names only the exception class** (eegfaktura-dev#45 L11, found by the never-log test): `readiness check failed: database not reachable: ConnectionRefusedError` instead of the exception's repr, which can carry host and database user.
+- **The JWT refusal and the missing-file line name no free text and no path** (eegfaktura-dev#45 Q2): `JWT decode failed: <exception class>` without PyJWT's message; `download: file missing on disk: storage <id>, container <id>, file <id>` instead of the on-disk path with the configured base directory.
 - **Logging and database settings are read from the environment by pydantic only** (eegfaktura-dev#45 Q3): `LOG_LEVEL` (with the `APP_LOG_LEVEL` fallback), `LOG_FORMAT`, `SERVICE_VERSION`, `DEPLOYMENT_ENVIRONMENT` and `DB_*` no longer have `os.environ` defaults evaluated at import; `DB_DSN` is built from the `DB_*` settings and is no longer an environment variable of its own (no deployment set it). An empty `DB_PORT` now means the default 5432 instead of stopping the import. `configure_logging` takes the settings.
 
 ### Fixed

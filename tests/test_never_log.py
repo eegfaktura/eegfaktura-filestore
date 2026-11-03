@@ -17,8 +17,11 @@
 
 # Never-log scan: reads the source (app/, main.py, alembic/) and fails on a log call that names
 # personal data or secrets, or that writes a whole object. Values are denied by default: a value
-# passes only when it is a literal, an id-like name or a class name. A legitimate hit gets an entry
-# in ALLOWED with its reason; an entry that no longer matches a hit fails too.
+# passes only when it is a literal, an id-like name or a class name. Names are split into words
+# (snake_case, camelCase, the dots of an access) and compared as whole words against the word list
+# all services share; string literals are not scanned for words. A legitimate hit gets an entry in
+# ALLOWED (file and finding) with its reason; an entry that no longer matches a hit fails too. A false
+# positive is fixed in the scanner, not allowlisted.
 
 import ast
 import os
@@ -30,14 +33,14 @@ import pytest
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 LOG_METHODS = {"trace", "debug", "info", "warning", "warn", "error", "exception", "critical", "fatal", "log"}
-# Matches inside identifiers (payer_iban, userEmail) as well as in message text ("e-mail", "first name").
-SENSITIVE = re.compile(
-    r"first[ _.-]?name|last[ _.-]?name|sur[ _.-]?name|family[ _.-]?name|given[ _.-]?name|full[ _.-]?name"
-    r"|e-?mail|iban|pass[ _.-]?word|passwd|pwd|secret|token|authorization|bearer|credential|cookie"
-    r"|api[ _.-]?key|private[ _.-]?key|user[ _.-]?name|user[ _.-]?id|file[ _.-]?name", re.IGNORECASE)
-# Too short to match inside other words: only as the whole identifier. "name" is a file's or a
-# person's name here, "sub" the Keycloak user id (no user tracking, W-261008-ca2).
-SENSITIVE_EXACT = {"name", "sub"}
+# The common word list (eegfaktura-dev#45), as written there; several words are one entry
+# (api_key, "mail address") and match however the name joins them (api_key, apiKey, apikey).
+WORD_LIST = ("password", "passwd", "pwd", "secret", "token", "jwt", "bearer", "authorization", "credential",
+             "creds", "cookie", "apikey", "api_key", "iban", "bic", "firstname", "lastname", "vorname",
+             "nachname", "name1", "name2", "street", "phone", "email", "mail address", "recipient", "sentto",
+             "owner", "accountholder", "username", "userid", "sub", "subject", "payload", "body")
+SENSITIVE_WORDS = {re.sub(r"[ _]", "", entry) for entry in WORD_LIST}
+_WORD = re.compile(r"[A-Z]+(?![a-z])\d*|[A-Z]?[a-z]+\d*|\d+")
 SCALAR = re.compile(r"(^|_)id$|Id$|^method$|^route$|^status(_code)?$")
 OBJECT_DUMPS = {"vars", "repr", "ascii", "dir", "locals", "globals", "asdict", "dict", "json", "dumps",
                 "model_dump", "model_dump_json", "to_dict", "as_dict"}
@@ -45,12 +48,7 @@ TRANSPARENT_CALLS = {"str", "int", "len", "type"}
 REPR_FORMAT = re.compile(r"%[-#0 +]*\d*(\.\d+)?[ra]")
 
 # (file, finding): why this value may be logged.
-ALLOWED = {
-    ("app/auth.py", "object: e"):
-        "PyJWT's exception text names the failed check, it carries no claim or token value",
-    ("app/rest/routers/filestore.py", "object: settings.FILESTORE_LOCAL_BASE_DIR"):
-        "the configured base directory of the on-disk path; the rest of the path is UUIDs only",
-}
+ALLOWED: dict[tuple[str, str], str] = {}
 
 
 def _is_log_call(node: ast.Call) -> bool:
@@ -75,15 +73,20 @@ def _path(node: ast.expr) -> Optional[str]:
     return f"{base}.{leaf}" if base else None
 
 
+def words(name: str) -> list[str]:
+    # payer_iban -> payer, iban; firstName -> first, name; HTTPAuthorization -> http, authorization
+    return [w.lower() for w in _WORD.findall(name)]
+
+
 def _sensitive(path: str) -> bool:
-    # Anything reached through a user is about that person, the id included (no user tracking).
-    return (path.rsplit(".", 1)[-1] in SENSITIVE_EXACT or SENSITIVE.search(path) is not None
-            or "user" in path.lower())
+    # a run of whole words, joined, is on the list: first_name and firstName are "firstname",
+    # user.id is "userid" (no user tracking); subscription is not "sub"
+    w = words(path)
+    return any("".join(w[i:j]) in SENSITIVE_WORDS for i in range(len(w)) for j in range(i + 1, len(w) + 1))
 
 
 def _literal(text: str) -> Iterator[str]:
-    if SENSITIVE.search(text):
-        yield f"sensitive name in text: {text}"
+    # message text is not scanned for words; only a repr conversion is a finding
     if REPR_FORMAT.search(text):
         yield f"repr of an object: {text}"
 
@@ -129,14 +132,16 @@ def _value(node: ast.expr) -> Iterator[str]:
 
 
 def _extra(node: ast.expr) -> Iterator[str]:
-    # The formatter writes only its allowlisted fields; here only names are checked.
+    # The formatter writes only its allowlisted fields; here only names are checked: the keys are
+    # field names, the values names reached in the dict.
     if not isinstance(node, ast.Dict):
         yield f"object: extra={ast.unparse(node)}"
         return
+    for key in node.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str) and _sensitive(key.value):
+            yield f"sensitive field: {key.value}"
     for sub in ast.walk(node):
-        if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
-            yield from _literal(sub.value)
-        elif isinstance(sub, (ast.Name, ast.Attribute, ast.Subscript)):
+        if isinstance(sub, (ast.Name, ast.Attribute, ast.Subscript)):
             path = _path(sub)
             if path is not None and _sensitive(path):
                 yield f"sensitive name: {ast.unparse(sub)}"
@@ -213,7 +218,9 @@ def test_the_scan_sees_the_source():
     'logger.info("upload %s", file.filename)',
     'logger.info("upload %s", name)',
     'logger.info("subject %s", claims.sub)',
-    'logger.info("e-mail not sent")',
+    'logger.info("x %s", owner_id)',
+    'logger.info("x %s", recipientId)',
+    'logger.info("x %s", str(claims.subject))',
     'logger.info("x", extra={"user.email": value})',
     'logger.info("x", extra={"event.action": token})',
     'logger.info("x", extra=fields)',
@@ -251,8 +258,24 @@ def test_the_scan_finds(line):
     'logger.info("x", exc_info=True)',
     'logger.info("x", extra={"event.action": "http.access", "http.response.status_code": status})',
     '_graphql_logger.log(logging.ERROR, "GraphQL error")',
+    'logger.info("e-mail not sent, token refused")',
+    'logger.info("subscription %s", subscription_id)',
+    'logger.info("x", extra={"event.action": "user.email.sent"})',
     'catalog.size(email)',
     'other.info(email)',
 ])
 def test_the_scan_leaves_alone(line):
     assert findings(line) == []
+
+
+@pytest.mark.parametrize("name", ["firstName", "first_name", "FIRSTNAME", "api_key", "apiKey", "mail_address",
+                                  "mailAddress", "name1", "accountHolder", "sent_to", "HTTPAuthorization",
+                                  "user.id", "current_user.id", "claims.sub", "request.body", "jwt", "iban"])
+def test_the_word_list_matches_whole_words(name):
+    assert _sensitive(name)
+
+
+@pytest.mark.parametrize("name", ["subscription", "file_id", "tokenizer", "bodyguard", "streetwise", "nickname",
+                                  "file.name", "storage.id", "tenant", "subtenant_id"])
+def test_the_word_list_leaves_other_words_alone(name):
+    assert not _sensitive(name)
