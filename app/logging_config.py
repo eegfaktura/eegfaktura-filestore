@@ -217,7 +217,12 @@ def configure_logging(settings) -> None:
 
 def _log_uncaught(exc_type, exc, tb) -> None:
     # An exception nothing caught (alembic not reaching the database, a bad JWT key file at import)
-    # ends the process: one line through the setup above instead of a plain traceback on stderr.
+    # ends the process: one line through the setup above instead of a plain traceback on stderr, with
+    # the exception's message (error.message: why the migration failed). KeyboardInterrupt and the
+    # other non-Exception BaseExceptions are no errors of the service: the default hook as before.
+    if not issubclass(exc_type, Exception):
+        sys.__excepthook__(exc_type, exc, tb)
+        return
     logging.getLogger("app.uncaught").critical("uncaught exception, the process stops", exc_info=(exc_type, exc, tb))
 
 

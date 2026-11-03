@@ -323,6 +323,17 @@ def test_an_uncaught_exception_is_one_json_line(setup_from_env, capsys):
     assert out.err == ""
 
 
+def test_a_keyboard_interrupt_goes_to_the_default_hook(setup_from_env, capsys):
+    setup_from_env(LOG_FORMAT="json")
+    try:
+        raise KeyboardInterrupt()
+    except KeyboardInterrupt:
+        sys.excepthook(*sys.exc_info())
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "KeyboardInterrupt" in out.err
+
+
 def _run(args, **env):
     full_env = {k: v for k, v in os.environ.items() if k not in OWN_ENV}
     full_env.update(env)
