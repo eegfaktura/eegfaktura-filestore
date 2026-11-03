@@ -10,28 +10,13 @@ import pytest
 from sqlalchemy.exc import DBAPIError
 
 from app.config import settings
-from tests.conftest import auth, new_tenant
-from tests.test_security import PDF, gql, upload
+from tests.conftest import ADD_FILE, PDF, add_file, auth, gql, new_tenant, upload
 
-ADD_FILE = ("mutation($file: Upload!, $t: String!, $a: [AttributeInput!]) {"
-            " addFile(file: $file, name: \"x\", fileCategory: \"contract\", tenant: $t, attributes: $a) {"
-            " __typename ... on AddFileError { message } } }")
 LIST_FILES = "query($t: String!) { files(tenant: $t) { id } }"
 
 
 def files_on_disk():
     return {os.path.join(d, f) for d, _, names in os.walk(settings.FILESTORE_LOCAL_BASE_DIR) for f in names}
-
-
-def add_file(client, tenant, attributes=None, filename="x.pdf"):
-    variables = {"file": None, "t": tenant, "a": attributes or []}
-    return client.post(
-        "/graphql",
-        headers=auth([tenant]),
-        data={"operations": json.dumps({"query": ADD_FILE, "variables": variables}),
-              "map": json.dumps({"0": ["variables.file"]})},
-        files={"0": (filename, PDF, "application/pdf")},
-    )
 
 
 def tenant_with_one_file(client):

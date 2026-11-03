@@ -7,20 +7,9 @@ import os
 
 import app.dependencies
 
-from app.config import settings
-from tests.conftest import auth, new_tenant
-from tests.test_security import gql, upload
+from tests.conftest import DELETE_FILE, auth, gql, new_tenant, stored_file, upload
 
-DELETE_FILE = ("mutation($id: UUID!) { deleteFile(fileId: $id) {"
-               " __typename ... on DeleteFile { id } ... on DeleteFileError { message } } }")
 LIST_FILES = "query($t: String!) { files(tenant: $t) { id } }"
-
-
-def stored_file(file_id):
-    for d, _, names in os.walk(settings.FILESTORE_LOCAL_BASE_DIR):
-        if file_id in names:
-            return os.path.join(d, file_id)
-    return None
 
 
 def uploaded(client):
