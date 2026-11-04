@@ -143,9 +143,6 @@ async def get_file(info, id: uuid.UUID, category: str = ""):
 
         file = (await s.execute(filequery)).scalars().unique().one()
 
-    if file is None:
-        raise Exception("Cant't find file")
-
     info.context["claims"].assert_tenant(file.tenant)
 
     return _to_file(file, info.context["request"])
