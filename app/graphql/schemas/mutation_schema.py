@@ -26,11 +26,6 @@ from app.graphql.scalars.attribute_scalar import AttributeInput
 from app.graphql.scalars.file_scalar import AddFileResponse, DeleteFileResponse
 from app.graphql.resolvers.file_resolver import add_file, delete_file
 
-# TODO implement isAuthenticated Class
-# https://strawberry.rocks/docs/guides/permissions#accessing-user-information
-
-
-
 
 @strawberry.type
 class Mutation:

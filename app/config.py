@@ -25,8 +25,6 @@ class Settings(BaseSettings):
     # a variable set but empty counts as not set (the defaults below and the APP_LOG_LEVEL fallback apply)
     model_config = SettingsConfigDict(env_ignore_empty=True)
 
-    APP_TITLE: str = "eegFaktura Filestore"
-    APP_VERSION: str = "0.1.0"
     # The fields below up to the HTTP section are read from the environment by pydantic only (no
     # os.environ default next to it), so a Settings() made later, e.g. in a test, sees the same rules.
     # LOG_LEVEL: trace, debug, info, warn, error; the former APP_LOG_LEVEL is still read when LOG_LEVEL is not set

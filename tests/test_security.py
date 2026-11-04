@@ -11,21 +11,7 @@ from jwt.utils import force_bytes
 
 import app.auth
 from app.config import settings
-from tests.conftest import _private_key, auth, make_token, new_tenant
-
-PDF = b"%PDF-1.4\n% filestore test\n"
-
-
-def upload(client, tenant, headers, category="contract"):
-    return client.post(
-        f"/filestore/upload/{category}/{tenant}/{uuid.uuid4()}",
-        headers=headers,
-        files={"file": ("vertrag.pdf", PDF, "application/pdf")},
-    )
-
-
-def gql(client, headers, query, variables=None):
-    return client.post("/graphql", headers=headers, json={"query": query, "variables": variables or {}})
+from tests.conftest import PDF, _private_key, auth, gql, make_token, new_tenant, upload
 
 
 # --- no or invalid token -------------------------------------------------------------------------

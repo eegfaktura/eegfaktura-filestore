@@ -36,7 +36,6 @@ LABEL org.opencontainers.image.licenses=AGPL-3.0
 LABEL org.opencontainers.image.source=https://github.com/eegfaktura/eegfaktura-filestore
 LABEL org.opencontainers.image.base.name=docker.io/python:3.13-slim-bookworm
 LABEL description="EEG Faktura filestore service container handling the file upload and download"
-LABEL version="0.1.0"
 
 WORKDIR /vfeeg-filestore
 
@@ -51,7 +50,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 COPY . .
 
 # Non-root runtime user (Pod-Security-Admission "restricted" + Defense-in-Depth).
-# /eegfaktura-filestore-data wird zur Laufzeit per PVC gemounted; das Helm-Chart
+# /eegfaktura-filestore-data wird zur Laufzeit per PVC gemounted; das Deployment (Kustomize)
 # muss `fsGroup: 1000` setzen, damit der gemountete Pfad fuer `app` schreibbar ist.
 RUN groupadd -r app --gid 1000 \
     && useradd -r -g app --uid 1000 -d /vfeeg-filestore -s /sbin/nologin app \

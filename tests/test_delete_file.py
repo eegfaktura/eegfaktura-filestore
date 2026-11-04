@@ -7,20 +7,9 @@ import os
 
 import app.dependencies
 
-from app.config import settings
-from tests.conftest import auth, new_tenant
-from tests.test_security import gql, upload
+from tests.conftest import DELETE_FILE, auth, gql, new_tenant, stored_file, upload
 
-DELETE_FILE = ("mutation($id: UUID!) { deleteFile(fileId: $id) {"
-               " __typename ... on DeleteFile { id } ... on DeleteFileError { message } } }")
 LIST_FILES = "query($t: String!) { files(tenant: $t) { id } }"
-
-
-def stored_file(file_id):
-    for d, _, names in os.walk(settings.FILESTORE_LOCAL_BASE_DIR):
-        if file_id in names:
-            return os.path.join(d, file_id)
-    return None
 
 
 def uploaded(client):
@@ -56,11 +45,16 @@ def test_delete_file_whose_file_is_gone_still_deletes_and_logs(client, caplog):
 
 def test_delete_file_reports_other_errors_removing_the_file(client, monkeypatch):
     tenant, file = uploaded(client)
+    path = stored_file(file["id"])
+    assert path is not None
 
-    def no_permission(path):
-        raise PermissionError(path)
+    def no_permission(file_name):
+        raise PermissionError(file_name)
 
     monkeypatch.setattr(app.dependencies, "delete_file", no_permission)
-    r = gql(client, auth([tenant]), DELETE_FILE, {"id": file["id"]})
+    try:
+        r = gql(client, auth([tenant]), DELETE_FILE, {"id": file["id"]})
+    finally:
+        os.remove(path)  # the row is gone; the file would stay in the shared base dir for the session
 
     assert r.json()["data"] is None and r.json()["errors"], r.text

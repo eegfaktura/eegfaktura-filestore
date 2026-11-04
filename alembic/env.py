@@ -15,24 +15,12 @@ from app.logging_config import configure_logging  # noqa: E402
 
 configure_logging(settings)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-
-
 from app.models import Base
 
 target_metadata = Base.metadata
 
 config.set_main_option(
     "sqlalchemy.url", settings.DB_DSN)
-
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 

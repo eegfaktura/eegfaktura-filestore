@@ -31,10 +31,7 @@ import app.health
 from app.access_log import _request_id, _trace_ids
 from app.config import settings
 from app.logging_config import JsonFormatter
-from tests.conftest import auth, make_token, new_tenant
-from tests.test_delete_file import DELETE_FILE, stored_file
-from tests.test_security import upload
-from tests.test_upload_cleanup import add_file
+from tests.conftest import DELETE_FILE, add_file, auth, make_token, new_tenant, stored_file, upload
 
 # The contract of the access line, written out: widening the module's field lists must fail here.
 ACCESS_FIELDS = {

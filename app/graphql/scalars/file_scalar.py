@@ -19,9 +19,7 @@ import datetime
 import uuid
 
 import strawberry
-from pydantic import Field
 import typing
-from strawberry.file_uploads import Upload
 
 from app.graphql.scalars.attribute_scalar import Attribute
 
@@ -38,23 +36,13 @@ class File:
     created_at: datetime.datetime
 
 
-@strawberry.input
-class AddFileInput:
-    file: Upload
-    tenant: str
-    user_id: typing.Optional[uuid.UUID] = ""
-    name: str
-    file_category: str
-    attributes: typing.Optional[typing.List[Attribute]] = Field(default_factory=list)
-
-
 @strawberry.type
 class AddFile:
     id: uuid.UUID
-    user_id: typing.Optional[uuid.UUID] = ""
+    user_id: typing.Optional[uuid.UUID] = None
     name: str
     file_category: str
-    attributes: typing.Optional[typing.List[Attribute]] = Field(default_factory=list)
+    attributes: typing.Optional[typing.List[Attribute]] = None
     file_download_uri: typing.Optional[str] = ""
     created_at: datetime.datetime
 
@@ -65,44 +53,12 @@ class DeleteFile:
     message: str ="File deleted"
 
 @strawberry.type
-class FileExists:
-    message: str = "File with same name, category and username already exists for this community"
-
-
-@strawberry.type
 class AddFileError:
     message: str = ""
 
 @strawberry.type
 class DeleteFileError:
     message: str = ""
-
-@strawberry.type
-class FileNotFound:
-    message: str = "File not found in this community"
-
-
-@strawberry.type
-class CommunityMissing:
-    message: str = "Required community is missing"
-
-
-@strawberry.type
-class NameMissing:
-    message: str = "Required name is missing"
-
-@strawberry.type
-class FileCategoryMissing:
-    message: str = "Required file category is missing"
-
-@strawberry.type
-class FileCategoryWrong:
-    message: str = "File category not found"
-
-@strawberry.type
-class NoFileContainerFound:
-    message: str = "No container for community and filetype found"
-
 
 
 AddFileResponse = typing.Annotated[

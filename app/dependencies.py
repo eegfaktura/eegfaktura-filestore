@@ -19,7 +19,6 @@
 import contextlib
 import errno
 import os.path
-import re
 import time
 
 import aiofiles
@@ -30,7 +29,6 @@ import uuid
 
 from fastapi import UploadFile
 from sqlalchemy import select
-from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_session
@@ -38,31 +36,6 @@ from app.config import settings
 from app.models import file_model, file_container_model, storage_model
 
 from fastapi import Request
-
-
-def convert_camel_case(name):
-    pattern = re.compile(r'(?<!^)(?=[A-Z])')
-    name = pattern.sub('_', name).lower()
-    return name
-
-
-def get_only_selected_fields(db_baseclass_name, info):
-    db_relations_fields = inspect(db_baseclass_name).relationships.keys()
-    selected_fields = [convert_camel_case(field.name) for field in
-                       info.selected_fields[0].selections if field.name not in db_relations_fields]
-    return selected_fields
-
-
-def get_valid_data(model_data_object, model_class):
-    data_dict = {}
-
-    for column in model_class.__table__.columns:
-        try:
-            data_dict[column.name] = getattr(model_data_object, column.name)
-        except Exception:
-            pass
-
-    return data_dict
 
 
 def get_file_download_uri(file_id: uuid.UUID, caching: bool = False):
@@ -138,17 +111,6 @@ def is_valid_uuid(value):
         return False
 
 
-async def calculate_file_attributes(filename: str):
-    file_attributes_dict = {}
-
-    if not os.path.isfile(filename):
-        raise FileNotFoundError(
-            errno.ENONET, os.strerror(errno.ENONET), filename
-        )
-
-    return file_attributes_dict
-
-
 async def upload_file(source_file_object: UploadFile, target_file_name: str):
     path = os.path.split(target_file_name)[0]
 
@@ -193,7 +155,6 @@ def move_file(file_source_name: str, file_target_name: str, overwrite: bool = Tr
         )
 
     if not os.path.isdir(target_path):
-        #TODO Logging
         # 0o750: the service runs as non-root since 1.0.4 and must be able to enter the directories it
         # creates (0o660 has no x bit: the move into a new storage/container failed with EACCES)
         os.makedirs(target_path, 0o750)
@@ -203,7 +164,6 @@ def move_file(file_source_name: str, file_target_name: str, overwrite: bool = Tr
 
 def check_tmp_dir():
     if not os.path.isdir(settings.FILESTORE_TEMP_DIR):
-        # TODO Log file creation
         os.mkdir(settings.FILESTORE_TEMP_DIR, mode=0o750)
 
 def get_absolute_url(url: str, request: Request):
