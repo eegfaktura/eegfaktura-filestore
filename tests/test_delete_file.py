@@ -46,9 +46,10 @@ def test_delete_file_whose_file_is_gone_still_deletes_and_logs(client, caplog):
 def test_delete_file_reports_other_errors_removing_the_file(client, monkeypatch):
     tenant, file = uploaded(client)
     path = stored_file(file["id"])
+    assert path is not None
 
-    def no_permission(path):
-        raise PermissionError(path)
+    def no_permission(file_name):
+        raise PermissionError(file_name)
 
     monkeypatch.setattr(app.dependencies, "delete_file", no_permission)
     try:
