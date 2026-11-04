@@ -238,25 +238,29 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
 
             tmpfilename = f"{settings.FILESTORE_TEMP_DIR}/{str(db_file.id)}"
             targetfile = f"{settings.FILESTORE_LOCAL_BASE_DIR}/{str_storage_id}/{str_container_id}/{str(db_file.id)}"
+            # the attribute rows of this file, also returned in the result
+            db_attributes = []
+
+            def add_attribute(key: str, value: str):
+                db_attribute = file_attribute_model.FileAttribute(file=db_file, key=key, value=value)
+                s.add(db_attribute)
+                db_attributes.append(db_attribute)
+
             try:
                 await upload_file(file, tmpfilename)
 
-                s.add(file_attribute_model.FileAttribute(file=db_file, key="orig_file_name",
-                                                         value=os.path.splitext(file.filename)[0]))
-                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_extension",
-                                                         value=os.path.splitext(file.filename)[1][1:]))
-                s.add(file_attribute_model.FileAttribute(file=db_file, key="media_type", value=file.content_type))
+                add_attribute("orig_file_name", os.path.splitext(file.filename)[0])
+                add_attribute("file_extension", os.path.splitext(file.filename)[1][1:])
+                add_attribute("media_type", file.content_type)
 
                 # Add extra attributes if set (the forbidden keys are rejected above)
                 if attributes is not None:
                     for attribute in attributes:
-                        s.add(
-                            file_attribute_model.FileAttribute(file=db_file, key=attribute.key, value=attribute.value))
+                        add_attribute(attribute.key, attribute.value)
 
                 move_file(tmpfilename, targetfile)
 
-                s.add(file_attribute_model.FileAttribute(file=db_file, key="file_bytes",
-                                                         value=str(os.path.getsize(targetfile))))
+                add_attribute("file_bytes", str(os.path.getsize(targetfile)))
 
             except BaseException:
                 # Nothing is committed yet: leave nothing on disk
@@ -275,6 +279,7 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                        user_id=db_file.user_id,
                        name=db_file.name,
                        created_at=db_file.created_at,
+                       attributes=db_attributes,
                        file_category=file_category,
                        file_download_uri=get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{db_file.id}",
                                                           info.context["request"]))

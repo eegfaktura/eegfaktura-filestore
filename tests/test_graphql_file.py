@@ -41,16 +41,19 @@ def test_contract_and_invoice_return_a_file_of_their_category_only(client):
         assert [e["path"] for e in r.json()["errors"]] == [[other]], r.text
 
 
-def test_add_file_returns_the_user_id_and_no_attributes(client):
+def test_add_file_returns_the_user_id_and_the_stored_attributes(client):
     tenant = new_tenant()
     user_id = str(uuid.uuid4())
-    query = ("mutation($file: Upload!, $t: String!, $u: UUID) {"
-             " addFile(file: $file, name: \"x\", fileCategory: \"contract\", tenant: $t, userId: $u) {"
-             " __typename ... on AddFile { userId attributes { key } } } }")
+    query = ("mutation($file: Upload!, $t: String!, $u: UUID, $a: [AttributeInput!]) {"
+             " addFile(file: $file, name: \"x\", fileCategory: \"contract\", tenant: $t, userId: $u, attributes: $a) {"
+             " __typename ... on AddFile { userId attributes { key value } } } }")
+    stored = [{"key": "orig_file_name", "value": "x"}, {"key": "file_extension", "value": "pdf"},
+              {"key": "media_type", "value": "application/pdf"}, {"key": "category_tag", "value": "user"},
+              {"key": "file_bytes", "value": str(len(PDF))}]
 
     def add(user):
         # without a user id the variable is left out (the argument is declared UUID!, with a default)
-        variables = {"file": None, "t": tenant} | ({"u": user} if user else {})
+        variables = {"file": None, "t": tenant, "a": [{"key": "category_tag", "value": "user"}]}             | ({"u": user} if user else {})
         return client.post(
             "/graphql",
             headers=auth([tenant]),
@@ -61,4 +64,4 @@ def test_add_file_returns_the_user_id_and_no_attributes(client):
 
     for user, expected in ((user_id, user_id), (None, None)):
         r = add(user)
-        assert r.json() == {"data": {"addFile": {"__typename": "AddFile", "userId": expected, "attributes": None}}}
+        assert r.json() == {"data": {"addFile": {"__typename": "AddFile", "userId": expected, "attributes": stored}}}
