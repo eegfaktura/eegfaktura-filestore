@@ -1,22 +1,15 @@
 # The single-file queries (file, contract, invoice) and the addFile result through the real application.
 
-import json
 import uuid
 
-from tests.conftest import PDF, auth, gql, new_tenant, upload
+from tests.conftest import PDF, add_file, auth, gql, new_tenant, upload
 
 FILE_FIELDS = "id tenant userId name fileCategory fileDownloadUri createdAt attributes { key value }"
 
 
-def uploaded(client, tenant, category):
-    r = upload(client, tenant, auth([tenant]), category=category)
-    assert r.status_code == 200, r.text
-    return r.json()["id"]
-
-
 def test_file_returns_the_stored_file(client):
     tenant = new_tenant()
-    file_id = uploaded(client, tenant, "contract")
+    file_id = upload(client, tenant, auth([tenant])).json()["id"]
 
     r = gql(client, auth([tenant]), f"query($id: UUID!) {{ file(id: $id) {{ {FILE_FIELDS} }} }}", {"id": file_id})
 
@@ -29,8 +22,8 @@ def test_file_returns_the_stored_file(client):
 
 def test_contract_and_invoice_return_a_file_of_their_category_only(client):
     tenant = new_tenant()
-    contract_id = uploaded(client, tenant, "contract")
-    invoice_id = uploaded(client, tenant, "invoice")
+    contract_id = upload(client, tenant, auth([tenant])).json()["id"]
+    invoice_id = upload(client, tenant, auth([tenant]), category="invoice").json()["id"]
     query = "query($id: UUID!) { contract(id: $id) { id fileCategory } invoice(id: $id) { id fileCategory } }"
 
     for file_id, own, other in ((contract_id, "contract", "invoice"), (invoice_id, "invoice", "contract")):
@@ -51,17 +44,6 @@ def test_add_file_returns_the_user_id_and_the_stored_attributes(client):
               {"key": "media_type", "value": "application/pdf"}, {"key": "category_tag", "value": "user"},
               {"key": "file_bytes", "value": str(len(PDF))}]
 
-    def add(user):
-        # without a user id the variable is left out (the argument is declared UUID!, with a default)
-        variables = {"file": None, "t": tenant, "a": [{"key": "category_tag", "value": "user"}]}             | ({"u": user} if user else {})
-        return client.post(
-            "/graphql",
-            headers=auth([tenant]),
-            data={"operations": json.dumps({"query": query, "variables": variables}),
-                  "map": json.dumps({"0": ["variables.file"]})},
-            files={"0": ("x.pdf", PDF, "application/pdf")},
-        )
-
     for user, expected in ((user_id, user_id), (None, None)):
-        r = add(user)
+        r = add_file(client, tenant, [{"key": "category_tag", "value": "user"}], query=query, user_id=user)
         assert r.json() == {"data": {"addFile": {"__typename": "AddFile", "userId": expected, "attributes": stored}}}

@@ -70,12 +70,13 @@ def gql(client, headers, query, variables=None):
     return client.post("/graphql", headers=headers, json={"query": query, "variables": variables or {}})
 
 
-def add_file(client, tenant, attributes=None, filename="x.pdf"):
-    variables = {"file": None, "t": tenant, "a": attributes or []}
+def add_file(client, tenant, attributes=None, filename="x.pdf", query=ADD_FILE, user_id=None):
+    # the query declares $file, $t, $a and, when a user id is given, $u; without one $u is left out
+    variables = {"file": None, "t": tenant, "a": attributes or []} | ({"u": user_id} if user_id else {})
     return client.post(
         "/graphql",
         headers=auth([tenant]),
-        data={"operations": json.dumps({"query": ADD_FILE, "variables": variables}),
+        data={"operations": json.dumps({"query": query, "variables": variables}),
               "map": json.dumps({"0": ["variables.file"]})},
         files={"0": (filename, PDF, "application/pdf")},
     )

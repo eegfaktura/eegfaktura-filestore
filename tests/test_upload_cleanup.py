@@ -2,7 +2,6 @@
 # anything is written, and when the commit fails anyway, neither the stored nor the temporary file
 # remains on disk.
 
-import json
 import os
 import uuid
 
@@ -77,13 +76,7 @@ def test_graphql_upload_with_too_long_name_stores_nothing(client):
     query = ADD_FILE.replace('name: "x"', 'name: "' + "n" * 129 + '"')
     assert query != ADD_FILE
 
-    r = client.post(
-        "/graphql",
-        headers=auth([tenant]),
-        data={"operations": json.dumps({"query": query, "variables": {"file": None, "t": tenant, "a": []}}),
-              "map": json.dumps({"0": ["variables.file"]})},
-        files={"0": ("x.pdf", PDF, "application/pdf")},
-    )
+    r = add_file(client, tenant, query=query)
 
     assert r.json()["data"]["addFile"] == {"__typename": "AddFileError",
                                            "message": "Invalid name: up to 128 characters"}, r.text
