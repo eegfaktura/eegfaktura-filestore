@@ -271,16 +271,13 @@ async def add_file(info, file: UploadFile, name: str, file_category: str, tenant
                     discard_files(tmpfilename, targetfile)
                 raise
 
-        file_dict = db_file.as_dict()
-        file_dict["user_id"] = db_file.user_id
-        file_dict["file_category"] = file_category
-        file_dict["file_download_uri"] = get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{db_file.id}",
-                                                          info.context["request"])
-
-        del file_dict["file_container_id"]
-        del file_dict["tenant"]
-
-        return AddFile(**file_dict)
+        return AddFile(id=db_file.id,
+                       user_id=db_file.user_id,
+                       name=db_file.name,
+                       created_at=db_file.created_at,
+                       file_category=file_category,
+                       file_download_uri=get_absolute_url(f"{settings.HTTP_FILE_DL_BASE_URI}/{db_file.id}",
+                                                          info.context["request"]))
 
     except FileNotFoundError as fnfe:
         # TODO Log error
