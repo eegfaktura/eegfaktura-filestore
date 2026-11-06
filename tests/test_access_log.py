@@ -21,6 +21,7 @@
 import io
 import json
 import logging
+import os
 import uuid
 from types import SimpleNamespace
 
@@ -28,9 +29,11 @@ import pytest
 
 import app.health
 from app.access_log import _request_id, _trace_ids
+from app.config import settings
 from app.logging_config import JsonFormatter
-from tests.conftest import make_token, new_tenant
+from tests.conftest import DELETE_FILE, add_file, auth, make_token, new_tenant, stored_file, upload
 
+# The contract of the access line, written out: widening the module's field lists must fail here.
 ACCESS_FIELDS = {
     "@timestamp", "log.level", "log.logger", "service.name", "service.version", "message",
     "event.action", "event.outcome", "event.duration", "http.request.method", "http.route",
@@ -255,9 +258,35 @@ def test_superuser_tenant_is_logged_only_when_tenant_shaped(client, access_lines
     query = "query Q($t: String!) { files(tenant: $t) { id } }"
     _graphql(client, headers, query, {"t": "rc100181-003"})
     _graphql(client, headers, query, {"t": "max.muster@example.com"})
-    first, second = access_lines()
+    _graphql(client, headers, query, {"t": "gc123456-001"})
+    first, second, gea = access_lines()
     assert first["tenant.id"] == "RC100181"
     assert "tenant.id" not in second and second["event.outcome"] == "success"
+    assert gea["tenant.id"] == "GC123456"
+
+
+def test_a_granted_tenant_outside_the_tenant_id_rule_is_left_out(client, access_lines):
+    # the token grants the value, the check passes, but it is no tenant id the log may carry
+    _, headers = _personal_headers(["max.muster"])
+    r = client.post(f"/filestore/upload/invoice/max.muster/{uuid.uuid4()}", headers=headers,
+                    files={"file": ("a.exe", b"MZ", "application/x-msdownload")})
+    assert r.status_code == 400  # rejected after the passed tenant check
+    (line,) = access_lines()
+    assert "tenant.id" not in line and line["event.outcome"] == "failure"
+
+
+@pytest.mark.parametrize("checked,logged", [("GC123456", "GC123456"), (" gc123456 ", "GC123456"),
+                                            ("TE100200_X-1", "TE100200_X-1"), ("A" * 64, "A" * 64),
+                                            ("A" * 65, None), ("-GC1", None), ("RC 1", None), ("", None)])
+def test_the_tenant_id_rule(checked, logged):
+    from app.logging_config import log_context, record_tenant_check
+
+    token = log_context.set({})
+    try:
+        record_tenant_check(checked, True)
+        assert log_context.get().get("tenant.id") == logged
+    finally:
+        log_context.reset(token)
 
 
 def test_graphql_errors_are_logged_without_query_text_or_values(client):
@@ -277,6 +306,111 @@ def test_graphql_errors_are_logged_without_query_text_or_values(client):
     raw = stream.getvalue()
     (line,) = [json.loads(x) for x in raw.splitlines()]
     assert line["log.level"] == "warn"
-    assert line["error.type"] == "HTTPException"
+    assert line["error.type"] == "fastapi.exceptions.HTTPException"
     assert line["graphql.error.path"] == "invoices"
     assert user_id not in raw and "invoices(" not in raw and "Tenant not allowed" not in raw
+
+
+# --- the request's fields on every line of the request, not only on the access line --------------
+
+@pytest.fixture
+def request_lines():
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(JsonFormatter())
+    root = logging.getLogger()
+    old_level = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+    def lines(logger):
+        return [d for d in map(json.loads, stream.getvalue().splitlines()) if d["log.logger"] == logger]
+
+    try:
+        yield lines
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(old_level)
+
+
+def _uploaded(client):
+    tenant = new_tenant()
+    return tenant, upload(client, tenant, auth([tenant])).json()["id"]
+
+
+def _with_request_id(tenants):
+    return {**auth(tenants), "X-Request-Id": "req-lines"}
+
+
+def test_rest_application_line_has_request_and_tenant(client, request_lines):
+    tenant, file_id = _uploaded(client)
+    os.remove(stored_file(file_id))
+
+    assert client.get(f"/filestore/{file_id}", headers=_with_request_id([tenant])).status_code == 404
+
+    (line,) = request_lines("app.rest.routers.filestore")
+    assert line["log.level"] == "warn"
+    assert line["request.id"] == "req-lines"
+    assert line["tenant.id"] == tenant
+    assert file_id in line["message"]  # the ids, not the on-disk path
+    assert settings.FILESTORE_LOCAL_BASE_DIR not in line["message"]
+
+
+def test_graphql_application_line_has_request_and_tenant(client, request_lines):
+    tenant, file_id = _uploaded(client)
+    os.remove(stored_file(file_id))
+
+    r = client.post("/graphql", headers=_with_request_id([tenant]),
+                    json={"query": DELETE_FILE, "variables": {"id": file_id}})
+    assert r.json()["data"]["deleteFile"]["id"] == file_id
+
+    (line,) = request_lines("app.graphql.resolvers.file_resolver")
+    assert line["request.id"] == "req-lines"
+    assert line["tenant.id"] == tenant
+
+
+def test_graphql_error_line_after_a_passed_check_has_request_and_tenant(client, request_lines):
+    tenant, _ = _uploaded(client)
+
+    r = add_file(client, tenant, filename="x." + "p" * 600)
+    assert r.json()["errors"][0]["path"] == ["addFile"]
+
+    (line,) = request_lines("strawberry.execution")
+    assert line["log.level"] == "error"
+    assert len(line["request.id"]) == 32
+    assert line["tenant.id"] == tenant
+
+
+def test_a_line_before_any_passed_check_has_the_request_but_no_tenant(client, request_lines):
+    r = client.get(f"/filestore/{uuid.uuid4()}", headers={"Authorization": "Bearer not-a-token",
+                                                          "X-Request-Id": "req-lines"})
+    assert r.status_code == 401
+
+    (line,) = request_lines("app.auth")
+    assert line["request.id"] == "req-lines"
+    assert "tenant.id" not in line
+    assert "segments" not in line["message"]  # the class name only, not PyJWT's "Not enough segments"
+
+
+def test_the_line_of_an_unhandled_error_has_request_and_tenant(request_lines):
+    import asyncio
+
+    from app.access_log import AccessLogMiddleware
+    from app.logging_config import record_tenant_check
+
+    async def failing_app(scope, receive, send):
+        record_tenant_check("RC100100", True)
+        raise RuntimeError("boom")
+
+    async def run():
+        scope = {"type": "http", "method": "GET", "path": "/x", "headers": [(b"x-request-id", b"req-500")]}
+        try:
+            await AccessLogMiddleware(failing_app)(scope, None, None)
+        except RuntimeError:
+            # as uvicorn does after the middleware, in the request's task
+            logging.getLogger("uvicorn.error").error("Exception in ASGI application")
+
+    asyncio.run(run())
+    (line,) = request_lines("uvicorn.error")
+    assert line["request.id"] == "req-500"
+    assert line["tenant.id"] == "RC100100"

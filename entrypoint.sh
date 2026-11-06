@@ -16,12 +16,16 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #+
 
+# A failed step (the migration above all) stops the container instead of starting the server on an
+# unmigrated database.
+set -euo pipefail
+
 PYTHON=`which python3`
 
 #if DB_PASSWORD EVN var ist not set
-if [ "$DB_PASSWORD" == "" ]; then
+if [ "${DB_PASSWORD:-}" == "" ]; then
   #check if DB_PASSWORD_FILE var is set
-  if [ "$DB_PASSWORD_FILE" != "" ]; then
+  if [ "${DB_PASSWORD_FILE:-}" != "" ]; then
     #check if file exists
     if [ -e "$DB_PASSWORD_FILE" ]; then
       # export: the image no longer sets DB_PASSWORD, so a plain assignment would not reach alembic/python
@@ -33,5 +37,5 @@ fi
 # Space for extra tasks
 # Initialize DB
 alembic upgrade head
-# Run main.py
-$PYTHON main.py
+# Run main.py; exec: the server is PID 1 and gets the container's SIGTERM
+exec "$PYTHON" main.py

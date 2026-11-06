@@ -15,16 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-import logging
-
 # The logging setup comes first, so lines (and warnings) written while the application's modules
 # are imported already go through it; uvicorn imports this module again for "main:application".
-from app.logging_config import configure_logging
+from app.config import settings
+from app.logging_config import configure_logging, log_service_start
 
-configure_logging()
+configure_logging(settings)
 
 import app.dependencies  # noqa: E402
-from app.config import settings  # noqa: E402
 import uvicorn  # noqa: E402
 from app.app import create_app  # noqa: E402
 
@@ -33,7 +31,7 @@ application = create_app()
 
 if __name__ == "__main__":
     app.dependencies.check_tmp_dir()
-    logging.getLogger(__name__).info("Starting uvicorn server...")
+    log_service_start()
     # log_config=None: uvicorn keeps the setup above; access_log=False: app.access_log writes the access line
     uvicorn.run("main:application", host="0.0.0.0", port=settings.HTTP_PORT, reload=False,
                 log_config=None, access_log=False)

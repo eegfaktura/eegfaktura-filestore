@@ -91,7 +91,7 @@ async def _check() -> bool:
                                "staying ready, the application pool can still serve")
             ready = True
         else:
-            logger.warning("readiness check failed: database not reachable: %r", e)
+            logger.warning("readiness check failed: database not reachable: %s", type(e).__name__)
             ready = False
     _last_result = (time.monotonic(), ready)
     return ready

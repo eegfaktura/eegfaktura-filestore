@@ -24,7 +24,9 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
 engine = create_async_engine(
-    f"postgresql+asyncpg://{settings.DB_USERNAME}:{settings.DB_PASSWORD}@{settings.DB_HOSTNAME}:{settings.DB_PORT}/{settings.DB_DATABASE}"
+    f"postgresql+asyncpg://{settings.DB_USERNAME}:{settings.DB_PASSWORD}@{settings.DB_HOSTNAME}:{settings.DB_PORT}/{settings.DB_DATABASE}",
+    # the error text of a failed statement ends up in the log: statement yes, values (user id, file name) no
+    hide_parameters=True,
 )
 async_session = sessionmaker(
     bind=engine,
@@ -34,12 +36,6 @@ async_session = sessionmaker(
     autoflush=False,
 )
 
-
-# @event.listens_for(engine.sync_engine, "connect")
-# def connect(dbapi_connection, connection_record):
-#     cursor_obj = dbapi_connection.cursor()
-#     cursor_obj.execute(f"SET SEARCH_PATH TO filestore, public;")
-#     cursor_obj.close()
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
