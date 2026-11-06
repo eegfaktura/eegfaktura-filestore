@@ -8,6 +8,10 @@ this changelog highlights the changes relevant for overview and operations.
 
 ## [Unreleased]
 
+### Security
+- **Base image `python:3.13-slim-trixie`** instead of `-bookworm`: removes CVE-2023-45853 (zlib) and CVE-2025-7458
+  (sqlite), neither of which has a fix in bookworm. libpq moves from 15 to 17; the database server is unchanged.
+
 ### Added
 - **Never-log test** (eegfaktura-dev#45 L11, Q2, `tests/test_never_log.py`, no new dependency): scans the source (`app/`, `main.py`, `alembic/`) and fails the suite on a log call that names personal data or secrets, uses `%r`/`!r`, or writes a value it cannot show to be a literal, an id or a class name. Names are split into words (snake_case, camelCase, the dots of an access) and compared as whole words against the word list all services share, also with a plural `s` (`tokens`, `IBANs`); in an all lower-case name a list word of five or more letters also matches inside it (`accesstoken`). Message text is not scanned for words, except a list word directly before a placeholder of a format string or f-string (`"password=%s"`, `f"iban {x}"`). The stricter scan finds nothing in the source. A legitimate exception needs an entry (file and finding) with its reason in the test's `ALLOWED`; there is none: the two former ones are fixed at the call site (see Changed).
 
