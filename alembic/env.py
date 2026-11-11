@@ -1,5 +1,3 @@
-from logging.config import fileConfig
-
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
@@ -11,28 +9,18 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# The service's one logging setup (LOG_LEVEL, LOG_FORMAT), not a logging section in alembic.ini.
+from app.config import settings  # noqa: E402
+from app.logging_config import configure_logging  # noqa: E402
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-
+configure_logging(settings)
 
 from app.models import Base
-from app.config import settings
 
 target_metadata = Base.metadata
 
 config.set_main_option(
     "sqlalchemy.url", settings.DB_DSN)
-
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 
@@ -81,6 +69,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        hide_parameters=True,
         # Fixes the default schema SQLAlchemy reads on connect to public, whatever the database user is
         # called (a user named "filestore" would otherwise make filestore the default schema). Then
         # autogenerate/check reflect the filestore tables with their schema, as the models declare them.

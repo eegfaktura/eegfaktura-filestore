@@ -19,25 +19,51 @@ import logging
 from typing import List, Optional
 
 import jwt
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.config import settings
+from app.logging_config import current_log_context, record_tenant_check
 
 logger = logging.getLogger(__name__)
 
 
 def _load_public_key() -> str:
-    with open(settings.JWT_PUBLIC_KEY_FILE, "r") as f:
-        return f.read()
+    """Read the RS256 verification key from JWT_KEY_FILE.
+
+    The file holds either a bare public key (BEGIN PUBLIC KEY) or an X.509 certificate (BEGIN
+    CERTIFICATE, the realm certificate other components read); from a certificate the public key is
+    extracted. Returns the RSA public key as PEM. Anything else stops the start with a clear message.
+    """
+    with open(settings.JWT_PUBLIC_KEY_FILE, "rb") as f:
+        data = f.read()
+    try:
+        if b"-----BEGIN CERTIFICATE-----" in data:
+            key = x509.load_pem_x509_certificate(data).public_key()
+        else:
+            key = serialization.load_pem_public_key(data)
+    except ValueError as e:
+        raise RuntimeError(
+            f"JWT_KEY_FILE {settings.JWT_PUBLIC_KEY_FILE}: neither a PEM public key nor a PEM certificate"
+        ) from e
+    if not isinstance(key, rsa.RSAPublicKey):
+        raise RuntimeError(
+            f"JWT_KEY_FILE {settings.JWT_PUBLIC_KEY_FILE}: not an RSA key (RS256 needs one), "
+            f"got {type(key).__name__}"
+        )
+    return key.public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
 
 
-# Loaded once at import time. Fails fast if the key file is missing or unreadable.
+# Loaded once at import time. Fails fast if the key file is missing, unreadable or no RSA key.
 _PUBLIC_KEY: str = _load_public_key()
 
 _bearer = HTTPBearer(auto_error=True)
-
 
 def base_tenant(tenant: str) -> str:
     """Map a tenant id to the stem tenant used for document storage.
@@ -54,8 +80,9 @@ def base_tenant(tenant: str) -> str:
 
 class Claims(BaseModel):
     tenants: List[str] = Field(default_factory=list, alias="tenant")
-    preferred_username: Optional[str] = None
     realm_access: dict = Field(default_factory=dict)
+    # the Keycloak client the token was issued to (the integration, not a person): client.id in the log
+    azp: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
@@ -70,10 +97,15 @@ class Claims(BaseModel):
         return "superuser" in self.roles
 
     def assert_tenant(self, tenant: str) -> None:
-        if self.is_superuser():
-            return
         wanted = base_tenant(tenant).upper()
+        # the request's log context (app.access_log): the checked stem as tenant.id, or "refused";
+        # record_tenant_check keeps only a value that passes the tenant.id rule (a superuser's argument
+        # is not checked against the token).
+        if self.is_superuser():
+            record_tenant_check(wanted, True)
+            return
         allowed = {base_tenant(t).upper() for t in self.tenants}
+        record_tenant_check(wanted, wanted in allowed)
         if wanted not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -93,12 +125,16 @@ def get_claims(
             options={"require": ["exp"]},
         )
     except jwt.PyJWTError as e:
-        logger.warning("JWT decode failed: %s: %s", type(e).__name__, e)
+        # the class names the failed check (ExpiredSignatureError, InvalidAudienceError, ...); the text is left out
+        logger.warning("JWT decode failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from e
-    return Claims(**payload)
+    claims = Claims(**payload)
+    if claims.azp:
+        current_log_context()["client.id"] = claims.azp
+    return claims
 
 
 async def gql_context(

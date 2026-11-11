@@ -17,20 +17,34 @@
 
 import os
 
-from pydantic_settings import BaseSettings
+from pydantic import AliasChoices, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    APP_TITLE: str = "eegFaktura Filestore"
-    APP_VERSION: str = "0.1.0"
-    APP_LOG_LEVEL: str = "info"
+    # a variable set but empty counts as not set (the defaults below and the APP_LOG_LEVEL fallback apply)
+    model_config = SettingsConfigDict(env_ignore_empty=True)
+
+    # The fields below up to the HTTP section are read from the environment by pydantic only (no
+    # os.environ default next to it), so a Settings() made later, e.g. in a test, sees the same rules.
+    # LOG_LEVEL: trace, debug, info, warn, error; the former APP_LOG_LEVEL is still read when LOG_LEVEL is not set
+    LOG_LEVEL: str = Field("info", validation_alias=AliasChoices("LOG_LEVEL", "APP_LOG_LEVEL"))
+    # LOG_FORMAT: json (the image sets it) or text (default when run from source)
+    LOG_FORMAT: str = "text"
+    SERVICE_VERSION: str = "dev"
+    # deployment.environment on every log line (local, dev, pilot, prod); the field is left out when not set or blank
+    DEPLOYMENT_ENVIRONMENT: str = ""
     #Load Database config from ENV
-    DB_HOSTNAME: str = os.environ.get("DB_HOSTNAME", "127.0.0.1")
-    DB_USERNAME: str = os.environ.get("DB_USERNAME", "filestore")
-    DB_PASSWORD: str = os.environ.get("DB_PASSWORD", "")
-    DB_DATABASE: str = os.environ.get("DB_DATABASE", "filestore")
-    DB_PORT: int = int(os.environ.get("DB_PORT", 5432))
-    DB_DSN: str = f"postgresql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOSTNAME}:{DB_PORT}/{DB_DATABASE}"
+    DB_HOSTNAME: str = "127.0.0.1"
+    DB_USERNAME: str = "filestore"
+    DB_PASSWORD: str = ""
+    DB_DATABASE: str = "filestore"
+    DB_PORT: int = 5432
+
+    @property
+    def DB_DSN(self) -> str:
+        return f"postgresql://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOSTNAME}:{self.DB_PORT}/{self.DB_DATABASE}"
+
     #HTTP Server Vars
     HTTP_PROTOCOL: str = os.environ.get("HTTP_PROTOCOL", "http")
     HTTP_HOSTNAME: str = os.environ.get("HTTP_HOSTNAME", "localhost")
@@ -44,5 +58,12 @@ class Settings(BaseSettings):
     JWT_PUBLIC_KEY_FILE: str= os.environ.get("JWT_KEY_FILE", "jwt_pub_key.pem")
     JWT_AUDIENCE: str = os.environ.get("JWT_AUDIENCE", "account")
     GRAPHIQL_ENABLED: bool = os.environ.get("GRAPHIQL_ENABLED", "false").lower() == "true"
+
+    # here and not in the default above: the settings read the environment themselves
+    @field_validator("DEPLOYMENT_ENVIRONMENT")
+    @classmethod
+    def _trim_deployment_environment(cls, value: str) -> str:
+        return value.strip()
+
 settings = Settings()
 

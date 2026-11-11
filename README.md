@@ -12,7 +12,7 @@ for Austrian renewable energy communities (*Erneuerbare-Energiegemeinschaften*, 
 
 ## Tech stack
 
-- **Python 3.10**, **FastAPI** + **Strawberry GraphQL**
+- **Python 3.13**, **FastAPI** + **Strawberry GraphQL**
 - **SQLAlchemy 2** (async) + **asyncpg** over **PostgreSQL**; **Alembic** migrations
 - **uvicorn** (ASGI); **PyJWT** (RS256); `aiofiles`
 
@@ -47,6 +47,14 @@ Environment variables (names only — never commit secret values):
 - `FILESTORE_LOCAL_BASE_DIR`, `FILESTORE_TEMP_DIR`
 - `JWT_KEY_FILE`, `JWT_AUDIENCE`
 - `GRAPHIQL_ENABLED` — **disable in production**
+- `LOG_LEVEL` — `trace`, `debug`, `info` (default), `warn` (`warning` is accepted as `warn`), `error`; an unknown value stops the start.
+  The former `APP_LOG_LEVEL` is still read when `LOG_LEVEL` is not set.
+- `LOG_FORMAT` — `json` (set in the image: one JSON object per line on stdout, ECS field names) or
+  `text` (default when run from source)
+- `SERVICE_VERSION` — `service.version` in the log (the release build passes the commit, or the version for a `v*` tag;
+  a promoted prod/pilot image keeps its commit, its release version is the image tag)
+- `DEPLOYMENT_ENVIRONMENT` — `deployment.environment` on every log line (`local`, `dev`, `pilot`, `prod`); the field is
+  left out when not set or blank
 
 Exposed port: **5000**. On-disk layout:
 `{FILESTORE_LOCAL_BASE_DIR}/{storage_id}/{container_id}/{file_id}` (UUIDs only).
