@@ -17,7 +17,7 @@
 
 # Build-Stage: Compiler und libpq-Header nur hier (psycopg2 wird aus den Quellen gebaut).
 # Die Pakete landen in einem venv, das die Laufzeit-Stage uebernimmt.
-FROM python:3.13-slim-trixie AS builder
+FROM python:3.15-slim-trixie AS builder
 
 RUN apt-get update && apt-get -y install --no-install-recommends libpq-dev gcc libc6-dev
 RUN python3 -m venv /opt/venv
@@ -25,7 +25,7 @@ ENV PATH="/opt/venv/bin:${PATH}"
 COPY requirements.txt requirements.txt
 RUN pip3 install --no-cache-dir --upgrade pip && pip3 install --no-cache-dir --upgrade -r requirements.txt
 
-FROM python:3.13-slim-trixie
+FROM python:3.15-slim-trixie
 LABEL org.vfeeg.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
 LABEL org.vfeeg.image.authors="eegfaktura@vfeeg.org"
 LABEL org.opencontainers.image.vendor="Verein zur Förderung von Erneuerbaren Energiegemeinschaften"
